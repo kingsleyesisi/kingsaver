@@ -2,6 +2,31 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 
+async function expandUrl(url) {
+    if (url.includes('vt.tiktok.com') || url.includes('/t/')) {
+        try {
+            const response = await axios.head(url, {
+                maxRedirects: 5,
+                validateStatus: status => status >= 200 && status < 400
+            });
+            return response.request.res.responseUrl || url; // axios follows redirects, responseUrl is the final one
+        } catch (error) {
+            // If HEAD fails, try GET (some servers block HEAD)
+             try {
+                const response = await axios.get(url, {
+                    maxRedirects: 5,
+                    validateStatus: status => status >= 200 && status < 400
+                });
+                return response.request.res.responseUrl || url;
+            } catch (err) {
+                 console.warn(`Failed to expand URL ${url}: ${err.message}`);
+                 return url;
+            }
+        }
+    }
+    return url;
+}
+
 function extractVideoId(url) {
     const regex = /\/video\/(\d+)/;
     const match = url.match(regex);
@@ -10,24 +35,32 @@ function extractVideoId(url) {
 
 async function getTikTokData(videoUrl) {
     try {
-        const videoId = extractVideoId(videoUrl);
+        const fullUrl = await expandUrl(videoUrl);
+        const videoId = extractVideoId(fullUrl);
+        
+        // If we can't find ID but the URL expanded, maybe just try sending the full URL to the API
+        // But for now, let's log if we extracted it.
+        
         if (!videoId) {
-            throw new Error('Invalid TikTok URL');
+            // Attempt to pass URL directly if extraction fails, but warn.
+            console.warn(`Could not extract video ID from ${fullUrl}. Sending original URL to API.`);
         }
 
         const apiUrl = 'https://www.tikwm.com/api/';
+        console.log(`[INFO] Fetching data for: ${fullUrl}`);
+        
         const response = await axios.post(apiUrl, {
-            url: videoUrl,
+            url: fullUrl,
             hd: 1
         });
 
         if (response.data.code !== 0) {
-            throw new Error('Failed to get video information');
+            throw new Error(`API Error: ${response.data.msg || 'Failed to get video information'}`);
         }
 
         return response.data.data;
     } catch (error) {
-        console.error('Error fetching data:', error.message);
+        console.error('[ERROR] Fetching data:', error.message);
         throw error;
     }
 }
