@@ -49,9 +49,14 @@ app.get('/api/download', async (req, res) => {
         });
 
         // Sanitize filename to ensure it only contains safe characters for headers
-        const safeFilename = filename 
+        // And strictly limit to 10 characters max
+        let safeFilename = filename 
             ? filename.replace(/[^a-zA-Z0-9._-]/g, '_') 
             : 'video';
+            
+        if (safeFilename.length > 10) {
+            safeFilename = safeFilename.substring(0, 10);
+        }
             
         const contentDisposition = `attachment; filename="${safeFilename}.mp4"`;
 

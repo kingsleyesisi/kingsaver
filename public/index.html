@@ -375,22 +375,91 @@
             }
         }
 
+        async function triggerDownload(url, btnElement) {
+            // UI Feedback
+            const iconDefault = btnElement.querySelector('.icon-default');
+            const iconLoading = btnElement.querySelectorAll('.icon-loading');
+            const textDefault = btnElement.querySelector('.text-default');
+            const textLoading = btnElement.querySelector('.text-loading');
+
+            if (iconDefault) iconDefault.classList.add('hidden');
+            if (iconLoading) iconLoading.forEach(el => el.classList.remove('hidden'));
+            if (textDefault) textDefault.classList.add('hidden');
+            if (textLoading) textLoading.classList.remove('hidden');
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('Download failed');
+
+                const blob = await response.blob();
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+
+                // Try to get filename from content-disposition header if possible, 
+                // but since we are triggering this from a specific url that has filename param, 
+                // the server already sets it.
+                // However, triggerDownload is client side.
+                // Let's rely on the server's Content-Disposition by just letting the <a> tag do its work with the blob.
+                // Actually, for blob downloads, we need to set the download attribute manually if we want a specific name
+                // OR rely on the browser to infer it (which it often won't for blobs)
+                // So let's parse the filename from the URL param if present
+
+                const urlObj = new URL(url, window.location.origin);
+                const filenameParam = urlObj.searchParams.get('filename');
+                // The server now strictly truncates to 10 chars. 
+                // We'll just use a generic name or what's in the param + .mp4
+                // But wait, the server handles content-position. 
+                // When we fetch generic blob, the filename info is in the headers.
+
+                const disposition = response.headers.get('content-disposition');
+                let filename = 'video.mp4';
+                if (disposition && disposition.indexOf('attachment') !== -1) {
+                    const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+                    const matches = filenameRegex.exec(disposition);
+                    if (matches != null && matches[1]) {
+                        filename = matches[1].replace(/['"]/g, '');
+                    }
+                }
+
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(downloadUrl);
+                a.remove();
+
+            } catch (error) {
+                console.error("Download failed:", error);
+                alert("Download failed. Please try again.");
+            } finally {
+                // Restore UI
+                if (iconDefault) iconDefault.classList.remove('hidden');
+                if (iconLoading) iconLoading.forEach(el => el.classList.add('hidden'));
+                if (textDefault) textDefault.classList.remove('hidden');
+                if (textLoading) textLoading.classList.add('hidden');
+            }
+        }
+
         function createResultCard(data) {
-            // Determine best download URL (HD preferred)
-            const downloadUrl = data.hdplay || data.play;
+            // Determine best download URL (Standard Quality preferred for max compatibility)
+            const downloadUrl = data.play || data.hdplay;
             // Use our proxy endpoint
-            const proxyDownloadUrl = `/api/download?url=${encodeURIComponent(downloadUrl)}&filename=${encodeURIComponent(data.title || 'video')}.mp4`;
+            const proxyDownloadUrl = `/api/download?url=${encodeURIComponent(downloadUrl)}&filename=${encodeURIComponent(data.title || 'video')}`;
 
             return `
                 <div class="glass rounded-2xl overflow-hidden hover:shadow-2xl hover:shadow-yellow-500/10 transition-all duration-300 animate-[fadeIn_0.5s_ease-out]">
                     <div class="relative aspect-video bg-gray-900 group">
                         <img src="${data.cover}" alt="${data.title}" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity">
                         <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
-                             <a href="${proxyDownloadUrl}" class="bg-king-gold text-black p-4 rounded-full shadow-lg transform scale-90 group-hover:scale-110 transition-transform">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" viewBox="0 0 20 20" fill="currentColor">
+                             <button onclick="triggerDownload('${proxyDownloadUrl}', this)" class="bg-king-gold text-black p-4 rounded-full shadow-lg transform scale-90 group-hover:scale-110 transition-transform">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 icon-default" viewBox="0 0 20 20" fill="currentColor">
                                     <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
                                 </svg>
-                             </a>
+                                <svg class="animate-spin h-8 w-8 text-black icon-loading hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                             </button>
                         </div>
                         <div class="absolute top-2 right-2 bg-black/60 px-2 py-1 rounded-md text-xs font-mono text-white">
                             ${(data.duration)}s
@@ -413,9 +482,14 @@
                             <span class="flex items-center gap-1"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg> ${data.digg_count}</span>
                         </div>
 
-                         <a href="${proxyDownloadUrl}" class="block mt-4 w-full bg-gray-800 hover:bg-gray-700 text-white text-center py-3 rounded-lg font-medium transition-colors border border-gray-700 hover:border-king-gold/50">
-                            Download Auto
-                        </a>
+                         <button onclick="triggerDownload('${proxyDownloadUrl}', this)" class="block mt-4 w-full bg-gray-800 hover:bg-gray-700 text-white text-center py-3 rounded-lg font-medium transition-colors border border-gray-700 hover:border-king-gold/50 flex items-center justify-center gap-2">
+                            <span class="text-default">Download Auto</span>
+                            <span class="text-loading hidden">Downloading...</span>
+                            <svg class="animate-spin h-5 w-5 text-white icon-loading hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </button>
                     </div>
                 </div>
             `;
