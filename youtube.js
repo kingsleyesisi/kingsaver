@@ -26,9 +26,17 @@ const getFormatType = (f) => {
 const getYouTubeInfo = (url) => {
     return new Promise((resolve, reject) => {
         const ytDlpPath = path.join(__dirname, 'yt-dlp');
-        // Add --js-runtimes node to fix warning/error about missing JS runtime
-        const args = ['--js-runtimes', 'node', '-j', url];
+        // On Vercel, we might need to explicitly run with python3 if the shebang isn't respected or path is weird
+        // But since it is a zipapp with shebang, chmod +x should suffice. 
+        // However, explicitly using python3 is safer if we are unsure about env.
+        // Let's check if we can spawn it directly first.
         
+        // Add --js-runtimes node to fix warning/error about missing JS runtime
+        // Add --cache-dir /tmp/.yt-dlp for Vercel write permissions
+        // Use process.execPath to ensure we use the same Node binary running this script
+        const args = ['--js-runtimes', `node:${process.execPath}`, '--no-cache-dir', '--no-playlist', '-j', url];
+        console.log(`Spawning: ${ytDlpPath} ${args.join(' ')}`);
+
         const proc = spawn(ytDlpPath, args);
         
         let data = '';
@@ -37,11 +45,16 @@ const getYouTubeInfo = (url) => {
         proc.stdout.on('data', (chunk) => data += chunk);
         proc.stderr.on('data', (chunk) => errorData += chunk);
 
+        proc.on('error', (err) => {
+            console.error('yt-dlp spawn error:', err);
+            reject(new Error(`Failed to start yt-dlp: ${err.message}`));
+        });
+
         proc.on('close', (code) => {
             if (code !== 0) {
                 console.error('yt-dlp error:', errorData);
                 // Clean up error message for user display
-                return reject(new Error(errorData || 'Failed to fetch video details'));
+                return reject(new Error(errorData || 'Failed to fetch video details. Please check the URL and try again.'));
             }
 
             try {
@@ -97,7 +110,7 @@ const getYouTubeInfo = (url) => {
 const getYouTubeDownloadStream = (url, itag) => {
     const ytDlpPath = path.join(__dirname, 'yt-dlp');
     // Using node runtime
-    let args = ['--js-runtimes', 'node'];
+    let args = ['--js-runtimes', `node:${process.execPath}`, '--no-cache-dir', '--no-playlist'];
     
     // Format selection logic
     // We assume if generic 'itag' is passed, we just fetch it.
@@ -135,8 +148,16 @@ const getYouTubeDownloadStream = (url, itag) => {
     const proc = spawn(ytDlpPath, args);
     const stream = new PassThrough();
 
-    // Pipe stdout to the stream
-    proc.stdout.pipe(stream);
+    // Pipe stdout to the stream with error handling
+    proc.stdout.on('error', (err) => {
+        console.error('Proc stdout error:', err);
+        stream.emit('error', err);
+    });
+    
+    proc.stdout.pipe(stream).on('error', (err) => {
+        console.error('Pipe error:', err);
+        stream.emit('error', err);
+    });
 
     // Handle stderr for logging
     let errorLog = '';

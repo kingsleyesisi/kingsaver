@@ -3,6 +3,7 @@ const cors = require('cors');
 const axios = require('axios');
 const path = require('path');
 const { getTikTokData } = require('./main');
+const { getYouTubeInfo, getYouTubeDownloadStream } = require('./youtube');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -31,6 +32,48 @@ app.post('/api/info', async (req, res) => {
     } catch (error) {
         console.error('Error in /api/info:', error.message);
         res.status(500).json({ error: 'Failed to fetch video data', details: error.message });
+    }
+});
+
+// YouTube API Endpoints
+app.post('/api/youtube/info', async (req, res) => {
+    try {
+        const { url } = req.body;
+        if (!url) return res.status(400).json({ error: 'URL is required' });
+        const data = await getYouTubeInfo(url);
+        res.json(data);
+    } catch (error) {
+        console.error('Error in /api/youtube/info:', error.message);
+        res.status(500).json({ error: 'Failed to fetch video data', details: error.message });
+    }
+});
+
+app.get('/api/youtube/download', async (req, res) => {
+    try {
+        const { url, itag } = req.query;
+        if (!url || !itag) return res.status(400).send('URL and itag are required');
+
+        const stream = getYouTubeDownloadStream(url, itag);
+        
+        // We can't easily know the filename beforehand without another info fetch or just generic name
+        // We'll use a generic name with a timestamp
+        res.setHeader('Content-Disposition', `attachment; filename="king_saver_video_${Date.now()}.mp4"`);
+        res.setHeader('Content-Type', 'video/mp4');
+
+        stream.pipe(res).on('error', (err) => {
+            console.error('Response pipe error:', err);
+            // Response might be partially sent, so we can't easily send 500 here if headers sent
+        });
+        
+        stream.on('error', (err) => {
+            console.error('Stream error:', err);
+             if (!res.headersSent) res.status(500).send('Download failed');
+             else res.end(); // Ensure response ends if headers were sent
+        });
+
+    } catch (error) {
+        console.error('Error in /api/youtube/download:', error.message);
+        res.status(500).send('Failed to initiate download');
     }
 });
 
