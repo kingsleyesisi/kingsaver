@@ -2,12 +2,15 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const path = require('path');
+const compression = require('compression');
 const { getTikTokData } = require('./main');
 const { getYouTubeInfo, getYouTubeDownloadStream } = require('./youtube');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Enable compression for all responses
+app.use(compression());
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
