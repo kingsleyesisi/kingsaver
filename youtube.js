@@ -1,4 +1,8 @@
-const play = require('play-dl');
+const { spawn } = require('child_process');
+const path = require('path');
+
+// Path to local yt-dlp binary
+const ytDlpPath = path.join(__dirname, 'yt-dlp');
 
 // In-memory cache for video info (5 minute TTL)
 const infoCache = new Map();
@@ -19,109 +23,150 @@ setInterval(cleanCache, 60 * 1000);
 
 const getYouTubeInfo = async (url) => {
     try {
-        // Extract video ID for caching
-        const parsed = new URL(url);
-        const videoId = parsed.searchParams.get('v') || parsed.pathname.split('/').pop();
-        
-        if (!videoId) throw new Error('Invalid YouTube URL');
-        
-        // Check cache first
+        console.log('Fetching YouTube info for:', url);
+
+        // Check cache first (using URL as key for simplicity, or extract ID if robust)
+        // Extract video ID for better caching
+        let videoId = url;
+        try {
+             const u = new URL(url);
+             if (u.hostname.includes('youtube.com') || u.hostname.includes('youtu.be')) {
+                 videoId = u.searchParams.get('v') || u.pathname.split('/').pop();
+             }
+        } catch(e) {}
+
         const cached = infoCache.get(videoId);
         if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
-            console.log('Returning cached info for:', videoId);
-            return cached.data;
+             console.log('Returning cached info for:', videoId);
+             return cached.data;
         }
-        
-        console.log('Fetching YouTube info for:', videoId);
-        
-        // Fetch basic info (faster than full info)
-        const info = await play.video_basic_info(url);
-        const videoDetails = info.video_details;
-        
-        console.log('Got info, processing formats...');
-        
-        // Get all available formats
-        const allFormats = info.format || [];
-        
-        // Process formats with better detection
-        const simpleFormats = allFormats
-            .filter(f => f.url) // Only formats with URLs
-            .map(f => {
-                // Detect video/audio based on quality string and codecs
-                const qualityStr = f.quality || '';
-                const hasVideo = f.height && f.height > 0;
-                const hasAudio = f.audio_codec && f.audio_codec !== 'none';
-                const container = f.mimeType?.split(';')[0].split('/')[1] || 'mp4';
-                
-                return {
-                    itag: f.itag?.toString() || String(Math.random()),
-                    qualityLabel: f.qualityLabel || qualityStr || (f.height ? `${f.height}p` : 'Audio'),
-                    container,
-                    hasVideo,
-                    hasAudio,
-                    type: hasVideo && hasAudio ? 'both' : hasVideo ? 'video' : 'audio',
-                    height: f.height || null
-                };
-            })
-            .filter(f => f.type !== 'none');
 
-        // Organize formats by type
-        const combined = simpleFormats
+        const data = await new Promise((resolve, reject) => {
+            const process = spawn(ytDlpPath, ['--dump-json', url]);
+            
+            let stdout = '';
+            let stderr = '';
+
+            process.stdout.on('data', (data) => {
+                stdout += data.toString();
+            });
+
+            process.stderr.on('data', (data) => {
+                stderr += data.toString();
+            });
+
+            process.on('close', (code) => {
+                if (code !== 0) {
+                    reject(new Error(`yt-dlp exited with code ${code}: ${stderr}`));
+                } else {
+                    resolve(JSON.parse(stdout));
+                }
+            });
+        });
+
+        const videoDetails = data;
+        
+        console.log('Got info from yt-dlp');
+
+        // Map yt-dlp formats to our expected format
+        const formats = (videoDetails.formats || []).map(f => {
+            // Determine type
+            let type = 'none';
+            const hasVideo = f.vcodec && f.vcodec !== 'none';
+            const hasAudio = f.acodec && f.acodec !== 'none';
+
+            if (hasVideo && hasAudio) type = 'both';
+            else if (hasVideo) type = 'video';
+            else if (hasAudio) type = 'audio';
+
+            return {
+                itag: f.format_id, // Use format_id as itag
+                qualityLabel: f.format_note || (f.height ? `${f.height}p` : ''),
+                container: f.ext,
+                hasVideo,
+                hasAudio,
+                type,
+                height: f.height,
+                url: f.url
+            };
+        }).filter(f => f.type !== 'none');
+
+        // Organize formats same as before
+        const combined = formats
             .filter(f => f.type === 'both')
-            .sort((a, b) => (b.height || 0) - (a.height || 0))
-            .slice(0, 10);
+            .sort((a, b) => (b.height || 0) - (a.height || 0));
             
-        const audioOnly = simpleFormats
+        const audioOnly = formats
             .filter(f => f.type === 'audio')
-            .slice(0, 3);
-            
-        const videoOnly = simpleFormats
+            .sort((a, b) => (b.abr || 0) - (a.abr || 0)); // Sort by bitrate if possible, else it's fine
+
+        const videoOnly = formats
             .filter(f => f.type === 'video')
-            .sort((a, b) => (b.height || 0) - (a.height || 0))
-            .slice(0, 5);
+            .sort((a, b) => (b.height || 0) - (a.height || 0));
+
+        // Create a simplified list for the frontend
+        // We want ensure we have at least some playable options
+        // mp4 720p/360p valid combos are best for direct play
+        
+        const resultFormats = [
+            ...combined.slice(0, 10),
+            ...videoOnly.slice(0, 5),
+            ...audioOnly.slice(0, 3)
+        ];
 
         const result = {
             title: videoDetails.title,
-            thumbnail: videoDetails.thumbnails[0]?.url || '',
-            duration: videoDetails.durationInSec,
+            thumbnail: videoDetails.thumbnail,
+            duration: videoDetails.duration,
             author: {
-                name: videoDetails.channel?.name || 'Unknown',
-                avatar: videoDetails.channel?.icons?.[0]?.url || ''
+                name: videoDetails.uploader,
+                avatar: '' // yt-dlp doesn't always give avatar easily in dump-json without extra calls
             },
-            formats: [...combined, ...videoOnly, ...audioOnly],
-            ffmpegAvailable: false
+            formats: resultFormats,
+            ffmpegAvailable: true // We are using yt-dlp which handles merging if needed but here we just list formats
         };
         
-        // Cache the result
         infoCache.set(videoId, {
             data: result,
             timestamp: Date.now()
         });
-        
-        console.log(`Cached and returning info with ${result.formats.length} formats`);
-        
+
         return result;
+
     } catch (error) {
-        console.error('play-dl error:', error.message);
-        throw new Error(error.message || 'Failed to fetch video details. Please check the URL and try again.');
+        console.error('yt-dlp error:', error.message);
+        throw new Error('Failed to fetch video details.');
     }
 };
 
-const getYouTubeDownloadStream = async (url, itag) => {
-    try {
-        console.log('Creating download stream for:', url);
-        
-        // play-dl stream provides the best quality automatically
-        const stream = await play.stream(url, {
-            quality: 2, // Highest quality
-            discordPlayerCompatibility: false
-        });
-        
-        return stream.stream;
-    } catch (error) {
-        console.error('Failed to create download stream:', error);
-        throw error;
+const getYouTubeDownloadStream = (url, itag) => {
+    console.log(`Creating download stream for ${url} with format ${itag}`);
+    
+    // Spawn yt-dlp to output to stdout
+    // If itag matches a format_id, use -f
+    // If itag is 'best', let it choose
+    
+    const args = ['-o', '-', url];
+    if (itag && itag !== 'undefined') {
+        args.push('-f', itag);
     }
+    
+    // Important: 403 Forbidden happens because of IP mismatch between where URL is signed strings generated 
+    // and where it is downloaded. access via yt-dlp directly solves this as it downloads and pipes the bytes.
+    
+    const ytDlpProcess = spawn(ytDlpPath, args);
+    
+    // Handle spawn errors
+    ytDlpProcess.on('error', (err) => {
+        console.error('Failed to start yt-dlp process:', err);
+    });
+    
+    ytDlpProcess.stderr.on('data', (data) => {
+        // Log stderr but don't treat all as errors (progress info etc)
+        // console.error('yt-dlp stderr:', data.toString());
+    });
+
+    return ytDlpProcess.stdout;
 };
 
 module.exports = {
