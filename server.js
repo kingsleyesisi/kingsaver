@@ -5,6 +5,7 @@ const path = require('path');
 const compression = require('compression');
 const { getTikTokData } = require('./main');
 const { getYouTubeInfo, getYouTubeDownloadStream } = require('./youtube');
+const { getTwitterInfo, getTwitterDownloadStream } = require('./twitter');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -76,6 +77,45 @@ app.get('/api/youtube/download', async (req, res) => {
 
     } catch (error) {
         console.error('Error in /api/youtube/download:', error.message);
+        res.status(500).send('Failed to initiate download');
+    }
+});
+
+// Twitter API Endpoints
+app.post('/api/twitter/info', async (req, res) => {
+    try {
+        const { url } = req.body;
+        if (!url) return res.status(400).json({ error: 'URL is required' });
+        const data = await getTwitterInfo(url);
+        res.json(data);
+    } catch (error) {
+        console.error('Error in /api/twitter/info:', error.message);
+        res.status(500).json({ error: 'Failed to fetch video data', details: error.message });
+    }
+});
+
+app.get('/api/twitter/download', async (req, res) => {
+    try {
+        const { url } = req.query;
+        if (!url) return res.status(400).send('URL is required');
+
+        const stream = getTwitterDownloadStream(url);
+        
+        res.setHeader('Content-Disposition', `attachment; filename="king_saver_twitter_${Date.now()}.mp4"`);
+        res.setHeader('Content-Type', 'video/mp4');
+
+        stream.pipe(res).on('error', (err) => {
+            console.error('Response pipe error:', err);
+        });
+        
+        stream.on('error', (err) => {
+            console.error('Stream error:', err);
+             if (!res.headersSent) res.status(500).send('Download failed');
+             else res.end();
+        });
+
+    } catch (error) {
+        console.error('Error in /api/twitter/download:', error.message);
         res.status(500).send('Failed to initiate download');
     }
 });

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>King Saver - Twitter / X Downloader</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        king: {
+                            gold: '#FFD700', // Keep for branding
+                            red: '#FF0000',
+                            dark: '#1a1a1a',
+                            darker: '#0f0f0f',
+                            accent: '#FACC15' 
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    animation: {
+                        'spin-slow': 'spin 3s linear infinite',
+                        'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    },
+                    keyframes: {
+                        loading: {
+                            '0%': { transform: 'scaleX(0)' },
+                            '100%': { transform: 'scaleX(1)' }
+                        },
+                        fadeIn: {
+                            '0%': { opacity: '0', transform: 'translateY(10px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <!-- Twitter/X Icon SVG -->
+    <link rel="icon" href="https://upload.wikimedia.org/wikipedia/commons/5/5a/X_icon_2.svg"
+        type="image/svg+xml">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .gradient-text {
+            background: linear-gradient(to right, #000000, #333333); 
+            /* X is black, but on dark mode let's make it white/grey or maybe blue if we want old twitter vibes? 
+               Let's go with White for X */
+            background: linear-gradient(to right, #ffffff, #aaaaaa);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .accent-sky {
+             color: #0ea5e9; /* sky-500 */
+        }
+    </style>
+</head>
+
+<body class="bg-king-darker text-white min-h-screen flex flex-col overflow-x-hidden">
+
+    <!-- Header -->
+    <header class="w-full p-6 glass sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <a href="/" class="flex items-center gap-3 hover:opacity-80 transition-opacity">
+                <div
+                    class="w-10 h-10 bg-black border border-gray-700 rounded-full flex items-center justify-center shadow-lg shadow-gray-500/20">
+                    <svg class="w-5 h-5 text-white fill-current" viewBox="0 0 24 24">
+                        <path
+                            d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                    </svg>
+                </div>
+                <h1 class="text-2xl font-bold tracking-tight"><span class="text-white">King</span> <span
+                        class="gradient-text">Saver</span> <span class="text-xs text-gray-500 font-normal ml-2">Twitter / X
+                        Edition</span></h1>
+            </a>
+
+            <div class="flex items-center gap-2 text-sm text-gray-400">
+                <a href="/" class="hover:text-white transition-colors">Home</a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-grow container mx-auto px-4 py-12 max-w-5xl">
+
+        <!-- Hero Section -->
+        <div class="text-center mb-12 animate-[fadeIn_1s_ease-out]">
+            <h2 class="text-4xl md:text-5xl font-extrabold mb-4">Download X Videos <br class="hidden md:block" />
+                <span class="text-white">Free & Fast</span>
+            </h2>
+            <p class="text-gray-400 text-lg">Save videos from Twitter / X easily.</p>
+        </div>
+
+        <!-- Tabs -->
+        <div class="flex justify-center mb-8 gap-4 animate-[fadeIn_0.5s_ease-out]">
+            <button id="tab-single" onclick="switchTab('single')"
+                class="px-6 py-2 rounded-lg text-sm font-medium transition-all bg-white text-black shadow-lg hover:bg-gray-200">
+                Single Video
+            </button>
+            <button id="tab-history" onclick="switchTab('history')"
+                class="px-6 py-2 rounded-lg text-sm font-medium transition-all text-gray-400 hover:text-white">
+                History
+            </button>
+        </div>
+
+        <!-- Input Area -->
+        <div class="glass p-8 rounded-3xl shadow-2xl mb-12 border border-gray-800 relative overflow-hidden group">
+            <div
+                class="absolute inset-0 bg-gradient-to-r from-gray-500/5 to-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500">
+            </div>
+
+            <!-- Single Link Input -->
+            <div id="single-input-area" class="relative z-10 transition-all duration-300">
+                <div class="flex flex-col md:flex-row gap-4">
+                    <input type="text" id="single-url" placeholder="Paste Twitter / X link here..."
+                        class="flex-grow bg-king-dark border border-gray-700 text-white rounded-xl px-6 py-4 outline-none focus:border-white focus:ring-1 focus:ring-white transition-all text-lg placeholder-gray-600">
+                    <button onclick="processSingle()"
+                        class="bg-white text-black font-bold py-4 px-8 rounded-xl hover:shadow-lg hover:shadow-white/20 transform hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 min-w-[160px]">
+                        <span>Fetch</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd"
+                                d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"
+                                clip-rule="evenodd" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- History Area -->
+            <div id="history-area" class="relative z-10 hidden transition-all duration-300">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-bold text-white">Download History</h3>
+                    <button onclick="clearHistory()" class="text-xs text-red-500 hover:text-red-400 font-medium">Clear
+                        History</button>
+                </div>
+                <p class="text-gray-400 text-sm">Your recent downloads appear below.</p>
+            </div>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loading" class="hidden flex-col items-center justify-center py-12">
+            <div class="relative w-20 h-20">
+                <div class="absolute top-0 left-0 w-full h-full border-4 border-gray-800 rounded-full"></div>
+                <div
+                    class="absolute top-0 left-0 w-full h-full border-4 border-t-white border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin">
+                </div>
+            </div>
+            <p class="mt-6 text-gray-400 font-medium animate-pulse">Fetching video details...</p>
+        </div>
+
+        <!-- Results Section -->
+        <div id="results" class="flex flex-col gap-6 justify-center items-center w-full">
+            <!-- Cards will be injected here -->
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-black py-8 border-t border-gray-900 mt-auto">
+        <div class="container mx-auto px-4 text-center">
+            <p class="text-gray-500 font-medium mb-2">Designed & Made by The King 👑</p>
+            <p class="text-sm text-gray-600 flex items-center justify-center gap-2">
+                <span>Kings World</span>
+                <span class="w-1 h-1 bg-gray-600 rounded-full"></span>
+                <span>&copy; 2025 </span>
+            </p>
+        </div>
+    </footer>
+
+    <script src="js/twitter.js"></script>
+</body>
+
+</html>
