@@ -26,7 +26,7 @@ app.use((req, res, next) => {
     console.log(`[${timestamp}] [REQ] ${method} ${url}`);
     if (Object.keys(query).length > 0) console.log(`[${timestamp}] [QUERY]`, JSON.stringify(query));
     // Sanitize body if needed (avoid logging passwords, though not expected here)
-    if (Object.keys(body).length > 0) console.log(`[${timestamp}] [BODY]`, JSON.stringify(body));
+    if (body && Object.keys(body).length > 0) console.log(`[${timestamp}] [BODY]`, JSON.stringify(body));
 
     // Capture response finish
     res.on('finish', () => {
@@ -134,13 +134,14 @@ app.get('/api/twitter/download', async (req, res) => {
     }
 });
 
-// Instagram API Endpoints (Reusing Twitter/yt-dlp logic)
+// Instagram API Endpoints
+const { getInstagramInfo, getInstagramDownloadStream } = require('./instagram');
+
 app.post('/api/instagram/info', async (req, res) => {
     try {
         const { url } = req.body;
         if (!url) return res.status(400).json({ error: 'URL is required' });
-        // yt-dlp handles instagram well
-        const data = await getTwitterInfo(url); 
+        const data = await getInstagramInfo(url);
         res.json(data);
     } catch (error) {
         console.error('Error in /api/instagram/info:', error.message);
@@ -153,7 +154,7 @@ app.get('/api/instagram/download', async (req, res) => {
         const { url } = req.query;
         if (!url) return res.status(400).send('URL is required');
 
-        const stream = getTwitterDownloadStream(url);
+        const stream = getInstagramDownloadStream(url);
         
         res.setHeader('Content-Disposition', `attachment; filename="king_saver_instagram_${Date.now()}.mp4"`);
         res.setHeader('Content-Type', 'video/mp4');
@@ -174,12 +175,14 @@ app.get('/api/instagram/download', async (req, res) => {
     }
 });
 
-// Facebook API Endpoints (Reusing Twitter/yt-dlp logic)
+// Facebook API Endpoints
+const { getFacebookInfo, getFacebookDownloadStream } = require('./facebook');
+
 app.post('/api/facebook/info', async (req, res) => {
     try {
         const { url } = req.body;
         if (!url) return res.status(400).json({ error: 'URL is required' });
-        const data = await getTwitterInfo(url);
+        const data = await getFacebookInfo(url);
         res.json(data);
     } catch (error) {
         console.error('Error in /api/facebook/info:', error.message);
@@ -192,7 +195,7 @@ app.get('/api/facebook/download', async (req, res) => {
         const { url } = req.query;
         if (!url) return res.status(400).send('URL is required');
 
-        const stream = getTwitterDownloadStream(url);
+        const stream = getFacebookDownloadStream(url);
         
         res.setHeader('Content-Disposition', `attachment; filename="king_saver_facebook_${Date.now()}.mp4"`);
         res.setHeader('Content-Type', 'video/mp4');

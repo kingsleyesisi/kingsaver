@@ -194,3 +194,4 @@ function clearHistory() {
         loadHistory();
     }
 }
+    
