@@ -9,7 +9,7 @@ const { getTwitterInfo, getTwitterDownloadStream } = require('./twitter');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
+  
 // Enable compression for all responses
 app.use(compression());
 app.use(cors());
@@ -18,8 +18,22 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Request Logger
 app.use((req, res, next) => {
+    const start = Date.now();
     const timestamp = new Date().toISOString();
-    console.log(`[${timestamp}] ${req.method} ${req.url}`);
+    const { method, url, query, body } = req;
+
+    // Log request details
+    console.log(`[${timestamp}] [REQ] ${method} ${url}`);
+    if (Object.keys(query).length > 0) console.log(`[${timestamp}] [QUERY]`, JSON.stringify(query));
+    // Sanitize body if needed (avoid logging passwords, though not expected here)
+    if (Object.keys(body).length > 0) console.log(`[${timestamp}] [BODY]`, JSON.stringify(body));
+
+    // Capture response finish
+    res.on('finish', () => {
+        const duration = Date.now() - start;
+        console.log(`[${new Date().toISOString()}] [RES] ${method} ${url} ${res.statusCode} - ${duration}ms`);
+    });
+
     next();
 });
 
@@ -116,6 +130,85 @@ app.get('/api/twitter/download', async (req, res) => {
 
     } catch (error) {
         console.error('Error in /api/twitter/download:', error.message);
+        res.status(500).send('Failed to initiate download');
+    }
+});
+
+// Instagram API Endpoints (Reusing Twitter/yt-dlp logic)
+app.post('/api/instagram/info', async (req, res) => {
+    try {
+        const { url } = req.body;
+        if (!url) return res.status(400).json({ error: 'URL is required' });
+        // yt-dlp handles instagram well
+        const data = await getTwitterInfo(url); 
+        res.json(data);
+    } catch (error) {
+        console.error('Error in /api/instagram/info:', error.message);
+        res.status(500).json({ error: 'Failed to fetch video data', details: error.message });
+    }
+});
+
+app.get('/api/instagram/download', async (req, res) => {
+    try {
+        const { url } = req.query;
+        if (!url) return res.status(400).send('URL is required');
+
+        const stream = getTwitterDownloadStream(url);
+        
+        res.setHeader('Content-Disposition', `attachment; filename="king_saver_instagram_${Date.now()}.mp4"`);
+        res.setHeader('Content-Type', 'video/mp4');
+
+        stream.pipe(res).on('error', (err) => {
+            console.error('Response pipe error:', err);
+        });
+        
+        stream.on('error', (err) => {
+            console.error('Stream error:', err);
+             if (!res.headersSent) res.status(500).send('Download failed');
+             else res.end();
+        });
+
+    } catch (error) {
+        console.error('Error in /api/instagram/download:', error.message);
+        res.status(500).send('Failed to initiate download');
+    }
+});
+
+// Facebook API Endpoints (Reusing Twitter/yt-dlp logic)
+app.post('/api/facebook/info', async (req, res) => {
+    try {
+        const { url } = req.body;
+        if (!url) return res.status(400).json({ error: 'URL is required' });
+        const data = await getTwitterInfo(url);
+        res.json(data);
+    } catch (error) {
+        console.error('Error in /api/facebook/info:', error.message);
+        res.status(500).json({ error: 'Failed to fetch video data', details: error.message });
+    }
+});
+
+app.get('/api/facebook/download', async (req, res) => {
+    try {
+        const { url } = req.query;
+        if (!url) return res.status(400).send('URL is required');
+
+        const stream = getTwitterDownloadStream(url);
+        
+        res.setHeader('Content-Disposition', `attachment; filename="king_saver_facebook_${Date.now()}.mp4"`);
+        res.setHeader('Content-Type', 'video/mp4');
+
+        stream.pipe(res).on('error', (err) => {
+            console.error('Response pipe error:', err);
+        });
+        
+        stream.on('error', (err) => {
+            console.error('Stream error:', err);
+             if (!res.headersSent) res.status(500).send('Download failed');
+             else res.end();
+        });
+
+    } catch (error) {
+        console.error('Error in /api/facebook/download:', error.message);
         res.status(500).send('Failed to initiate download');
     }
 });
