@@ -103,20 +103,20 @@ const getYtDlpInfo = async (url) => {
              args.push('--cookies', process.env.COOKIES_FILE);
         }
 
-        const process = spawn(ytDlpPath, args);
+        const childProcess = spawn(ytDlpPath, args);
         
         let stdout = '';
         let stderr = '';
 
-        process.stdout.on('data', (data) => {
+        childProcess.stdout.on('data', (data) => {
             stdout += data.toString();
         });
 
-        process.stderr.on('data', (data) => {
+        childProcess.stderr.on('data', (data) => {
             stderr += data.toString();
         });
 
-        process.on('close', (code) => {
+        childProcess.on('close', (code) => {
             if (code !== 0) {
                 return reject(new Error(`yt-dlp exited with code ${code}: ${stderr}`));
             }

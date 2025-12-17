@@ -18,6 +18,7 @@
     "cors": "^2.8.5",
     "express": "^5.2.1",
     "metadata-scraper": "^0.2.61",
+    "pg": "^8.16.3",
     "play-dl": "^1.9.7",
     "playwright": "^1.51.1"
   }

@@ -6,12 +6,19 @@ const compression = require('compression');
 const { getTikTokData } = require('./main');
 const { getYouTubeInfo, getYouTubeDownloadStream } = require('./youtube');
 const { getTwitterInfo, getTwitterDownloadStream } = require('./twitter');
+const { pool, initDb } = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
   
 // Enable compression for all responses
 app.use(compression());
+
+// Initialize Database
+initDb();
+
+// Trust proxy for IP extraction (if behind Vercel/Nginx)
+app.set('trust proxy', true);
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -32,9 +39,78 @@ app.use((req, res, next) => {
     res.on('finish', () => {
         const duration = Date.now() - start;
         console.log(`[${new Date().toISOString()}] [RES] ${method} ${url} ${res.statusCode} - ${duration}ms`);
+        
+        // Track visit in DB (async, don't await)
+        // Extract IP (handle proxy headers)
+        const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+        const userAgent = req.get('User-Agent');
+        
+        // Only track API requests or main page visits, skip static assets if desired
+        // But user said "let it also keep track of visitors", usually implies page views.
+        // We will log everything for now, or maybe exclude /api/stats to avoid polluting own stats
+        if (url !== '/api/stats' && !url.match(/\.(css|js|jpg|png|ico|svg|woff2)$/)) {
+            // Determine Platform
+            let platform = 'Web';
+            if (url.includes('youtube')) platform = 'YouTube';
+            else if (url.includes('tiktok')) platform = 'TikTok';
+            else if (url.includes('instagram')) platform = 'Instagram';
+            else if (url.includes('facebook')) platform = 'Facebook';
+            else if (url.includes('twitter')) platform = 'Twitter';
+
+             const insertQuery = `
+                INSERT INTO visits (path, method, ip, user_agent, platform)
+                VALUES ($1, $2, $3, $4, $5)
+            `;
+            pool.query(insertQuery, [url, method, ip, userAgent, platform]).catch(err => console.error('Tracking Error:', err.message));
+        }
     });
 
     next();
+});
+
+// Stats API Endpoint (Private)
+app.get('/api/stats', async (req, res) => {
+    // Basic Auth
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+        res.setHeader('WWW-Authenticate', 'Basic');
+        return res.status(401).send('Authentication required');
+    }
+
+    const auth = new Buffer.from(authHeader.split(' ')[1], 'base64').toString().split(':');
+    const user = auth[0];
+    const pass = auth[1];
+
+    if (user === 'admin' && pass === 'admin') {
+        try {
+            // Fetch stats
+            const totalVisits = await pool.query('SELECT COUNT(*) FROM visits');
+            const visitsByPath = await pool.query('SELECT path, COUNT(*) as count FROM visits GROUP BY path ORDER BY count DESC LIMIT 10');
+            const recentVisits = await pool.query('SELECT * FROM visits ORDER BY timestamp DESC LIMIT 20');
+            const visitsOverTime = await pool.query(`
+                SELECT date_trunc('hour', timestamp) as time, COUNT(*) 
+                FROM visits 
+                WHERE timestamp > NOW() - INTERVAL '24 hours' 
+                GROUP BY 1 
+                ORDER BY 1
+            `);
+            const visitsByPlatform = await pool.query('SELECT platform, COUNT(*) as count FROM visits GROUP BY platform ORDER BY count DESC');
+
+            res.json({
+                total: totalVisits.rows[0].count,
+                byPath: visitsByPath.rows,
+                recent: recentVisits.rows,
+                overTime: visitsOverTime.rows,
+                byPlatform: visitsByPlatform.rows
+            });
+        } catch (err) {
+            console.error('Stats Query Error:', err);
+            res.status(500).json({ error: 'Failed to fetch stats' });
+        }
+    } else {
+        res.setHeader('WWW-Authenticate', 'Basic');
+        return res.status(401).send('Invalid credentials');
+    }
 });
 
 // API Endpoint to get video info
