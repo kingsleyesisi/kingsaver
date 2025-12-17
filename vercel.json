@@ -15,6 +15,7 @@
             "use": "@vercel/static"
         }
     ],
+    "cleanUrls": true,
     "routes": [
         {
             "src": "/",
@@ -23,6 +24,10 @@
         {
             "src": "/youtube",
             "dest": "/public/youtube.html"
+        },
+        {
+            "src": "/stats",
+            "dest": "/public/stats.html"
         },
         {
             "src": "/api/(.*)",

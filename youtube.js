@@ -1,6 +1,8 @@
 const ytdl = require('@distube/ytdl-core');
 const { spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 
 // Path to local yt-dlp binary
 const ytDlpPath = path.join(__dirname, 'yt-dlp');
@@ -22,6 +24,19 @@ const cleanCache = () => {
 // Run cache cleanup every minute
 setInterval(cleanCache, 60 * 1000);
 
+// Helper to write cookies from ENV to a temp file for yt-dlp
+const ensureCookiesFile = () => {
+    if (!process.env.YOUTUBE_COOKIES) return null;
+    const cookiesPath = path.join(os.tmpdir(), 'youtube_cookies.txt');
+    try {
+        fs.writeFileSync(cookiesPath, process.env.YOUTUBE_COOKIES, 'utf8');
+        return cookiesPath;
+    } catch (e) {
+        console.error('Failed to write cookies file:', e);
+        return null;
+    }
+};
+
 const getYouTubeInfo = async (url) => {
     try {
         console.log('Fetching YouTube info for:', url);
@@ -38,10 +53,26 @@ const getYouTubeInfo = async (url) => {
             // Try ytdl-core first (faster)
             // Add agents/cookies if provided in env
             const agentOptions = {};
-            if (process.env.COOKIES) {
-                // Parse cookies if present (assuming string format or JSON)
-                // For simplicity, lets assume we might just want to use the default agent or add cookies to header
-                // @distube/ytdl-core supports 'agent' option
+            const cookiesPath = ensureCookiesFile();
+            
+            // If we have cookies, we can try to create an agent for ytdl-core
+            // But ytdl-core allows passing cookies directly in agent options sometimes?
+            // Actually @distube/ytdl-core createAgent is good.
+            if (cookiesPath) {
+                 try {
+                    // We need to parse Netscape format to JSON for ytdl-core if we want to use it purely JS
+                    // OR we just rely on yt-dlp fallback if ytdl-core fails.
+                    // Let's create a generic agent just in case.
+                    const agent = ytdl.createAgent(JSON.parse(fs.readFileSync(cookiesPath, 'utf8'))); 
+                    // Wait, YOUTUBE_COOKIES usage for ytdl-core implies we have them in JSON? 
+                    // The plan says Netscape format for yt-dlp. 
+                    // Parsing Netscape to JSON is extra work. 
+                    // Let's rely on yt-dlp fallback for signed-in stuff, it's more robust.
+                    // But we will print we have cookies.
+                    console.log('Cookies detected, available for yt-dlp fallback.');
+                 } catch (e) { 
+                     // Ignore json parse error if it is netscape format
+                 }
             }
             
             // Standard call
@@ -96,11 +127,12 @@ const getYouTubeInfo = async (url) => {
 // Helper for yt-dlp info (Generic)
 const getYtDlpInfo = async (url) => {
     return new Promise((resolve, reject) => {
-        // Use --cookies if env var set? 
-        // For now just dump-json
+        // Use --cookies if env var set
         const args = ['--dump-json', url];
-        if (process.env.COOKIES_FILE) {
-             args.push('--cookies', process.env.COOKIES_FILE);
+        const cookiesPath = ensureCookiesFile();
+        if (cookiesPath) {
+             args.push('--cookies', cookiesPath);
+             args.push('--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
         }
 
         const childProcess = spawn(ytDlpPath, args);
@@ -205,7 +237,11 @@ const getYouTubeDownloadStream = (url, itag) => {
 const getYtDlpStream = (url) => {
     console.log("Spawning yt-dlp for stream...");
     const args = ['-o', '-', url]; // dump to stdout
-    if (process.env.COOKIES_FILE) args.push('--cookies', process.env.COOKIES_FILE);
+    const cookiesPath = ensureCookiesFile();
+    if (cookiesPath) {
+        args.push('--cookies', cookiesPath);
+        args.push('--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+    }
     
     // We might want -f best?
     

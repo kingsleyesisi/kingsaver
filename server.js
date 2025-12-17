@@ -345,6 +345,10 @@ app.get('/api/download', async (req, res) => {
 });
 
 // Serve index.html for root is handled by express.static
+// But for clean URLs locally:
+app.get('/stats', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'stats.html'));
+});
 
 // ZIP Download Endpoint
 const archiver = require('archiver');
