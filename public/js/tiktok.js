@@ -70,10 +70,16 @@ async function fetchVideoData(url) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ url })
         });
-        return await response.json();
+        const data = await response.json();
+        
+        if (!response.ok) {
+            return { error: data.details || data.error || 'Failed to fetch video' };
+        }
+        
+        return data;
     } catch (error) {
         console.error("Error:", error);
-        return null;
+        return { error: 'Network error or server is down' };
     }
 }
 
@@ -126,56 +132,199 @@ async function triggerDownload(url, btnElement) {
     }
 }
 
+async function triggerBatchDownload(btnElement) {
+    const images = JSON.parse(btnElement.getAttribute('data-images'));
+    const title = btnElement.getAttribute('data-title');
+    
+    if (!images || images.length === 0) return alert('No images to download');
+
+    // UI Feedback
+    const iconDefault = btnElement.querySelector('.icon-default');
+    const textDefault = btnElement.querySelector('.text-default');
+    const textLoading = btnElement.querySelector('.text-loading');
+
+    if (iconDefault) iconDefault.classList.add('hidden');
+    if (textDefault) textDefault.classList.add('hidden');
+    if (textLoading) textLoading.classList.remove('hidden');
+
+    try {
+        // Construct URL with query params
+        const urlParams = new URLSearchParams();
+        images.forEach(url => urlParams.append('urls', url));
+        urlParams.append('filename', title);
+
+        const downloadUrl = `/api/download-zip?${urlParams.toString()}`;
+        
+        // Trigger download
+        window.location.href = downloadUrl;
+
+        // Reset UI after a delay (since we can't easily track download finish of a direct link navigation/iframe)
+        setTimeout(() => {
+             if (iconDefault) iconDefault.classList.remove('hidden');
+             if (textDefault) textDefault.classList.remove('hidden');
+             if (textLoading) textLoading.classList.add('hidden');
+        }, 3000);
+
+    } catch (error) {
+        console.error("Batch download failed:", error);
+        alert("Download failed. Please try again.");
+         if (iconDefault) iconDefault.classList.remove('hidden');
+         if (textDefault) textDefault.classList.remove('hidden');
+         if (textLoading) textLoading.classList.add('hidden');
+    }
+}
+
+
 function createResultCard(data) {
-    // Determine best download URL (Standard Quality preferred for max compatibility)
-    const downloadUrl = data.play || data.hdplay;
-    // Use our proxy endpoint
-    const proxyDownloadUrl = `/api/download?url=${encodeURIComponent(downloadUrl)}&filename=${encodeURIComponent(data.title || 'video')}`;
+    console.log("createResultCard data:", data); // Debugging
 
-    return `
-        <div class="glass rounded-2xl overflow-hidden hover:shadow-2xl hover:shadow-yellow-500/10 transition-all duration-300 animate-[fadeIn_0.5s_ease-out]">
-            <div class="relative aspect-video bg-gray-900 group">
-                <img src="${data.cover}" alt="${data.title}" class="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity">
-                <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
-                        <button onclick="triggerDownload('${proxyDownloadUrl}', this)" class="bg-king-gold text-black p-4 rounded-full shadow-lg transform scale-90 group-hover:scale-110 transition-transform">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 icon-default" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
-                        </svg>
-                        <svg class="animate-spin h-8 w-8 text-black icon-loading hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        </button>
-                </div>
-                <div class="absolute top-2 right-2 bg-black/60 px-2 py-1 rounded-md text-xs font-mono text-white">
-                    ${(data.duration)}s
-                </div>
-            </div>
-            <div class="p-5">
-                <div class="flex items-start justify-between mb-3">
-                    <div class="flex items-center gap-2">
-                        <img src="${data.author.avatar}" class="w-8 h-8 rounded-full border border-gray-700">
-                        <div>
-                            <p class="text-sm font-bold text-white leading-tight">${data.author.nickname}</p>
-                            <p class="text-xs text-gray-500">@${data.author.unique_id}</p>
-                        </div>
-                    </div>
-                </div>
-                <p class="text-gray-300 text-sm line-clamp-2 mb-4 h-10">${data.title}</p>
+    // Unified Premium Card Design
+    // Safely access author properties
+    const author = data.author || {};
+    const authorName = author.nickname || data.upload_user || 'TikTok User';
+    const authorHandle = author.unique_id ? `@${author.unique_id}` : '';
+    const authorAvatar = author.avatar || data.upload_user_avatar || 'https://p16-sign-va.tiktokcdn.com/tos-maliva-avt-0068/77f08b1f4ddcfddda7ab521ba665cab9~tplv-tiktokx-cropcenter-q:1080:1080:q70.webp'; // Fallback
+    const title = data.title || '';
+    
+    // Check for slideshow: Type is slideshow, OR images exist (and not empty), OR duration is 0
+    // Coerce duration to number just in case
+    const duration = Number(data.duration || 0);
+    const hasImages = data.images && Array.isArray(data.images) && data.images.length > 0;
+    const isSlideshow = data.type === 'slideshow' || hasImages || duration === 0;
 
-                <div class="flex items-center justify-between text-xs text-gray-500 border-t border-gray-800 pt-3">
-                    <span class="flex items-center gap-1"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> ${data.play_count}</span>
-                    <span class="flex items-center gap-1"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg> ${data.digg_count}</span>
-                </div>
+    if (isSlideshow) {
+        let imagesHtml = '';
+        const images = data.images || [];
+        
+        // If it's a slideshow but no images array (edge case), try to use cover
+        if (images.length === 0 && data.cover) {
+             images.push(data.cover);
+        }
 
-                    <button onclick="triggerDownload('${proxyDownloadUrl}', this)" class="block mt-4 w-full bg-gray-800 hover:bg-gray-700 text-white text-center py-3 rounded-lg font-medium transition-colors border border-gray-700 hover:border-king-gold/50 flex items-center justify-center gap-2">
-                    <span class="text-default">Download Auto</span>
+        images.forEach((img, index) => {
+            const imgDownloadUrl = `/api/download?url=${encodeURIComponent(img)}&filename=${encodeURIComponent((data.title || 'image').substring(0, 10) + '_' + index)}`;
+            
+            imagesHtml += `
+            <div class="snap-center shrink-0 w-80 flex flex-col gap-3 group">
+                <div class="relative rounded-2xl overflow-hidden aspect-[3/4] border border-white/10 bg-gray-900/50 shadow-2xl">
+                    <img src="${img}" class="w-full h-full object-cover">
+                </div>
+                <button onclick="triggerDownload('${imgDownloadUrl}', this)" class="w-full bg-gray-800 hover:bg-gray-700 text-white py-3 rounded-xl font-medium transition-colors border border-white/5 flex items-center justify-center gap-2 group-hover:border-king-gold/50">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 icon-default text-gray-400 group-hover:text-king-gold transition-colors" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+                    </svg>
+                    <span class="text-default">Download Photo</span>
                     <span class="text-loading hidden">Downloading...</span>
                     <svg class="animate-spin h-5 w-5 text-white icon-loading hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
                 </button>
+            </div>`;
+        });
+
+        return `
+        <div class="glass rounded-3xl overflow-hidden hover:shadow-2xl hover:shadow-yellow-500/10 transition-all duration-300 animate-[fadeIn_0.5s_ease-out] w-full max-w-5xl bg-black/80 border border-white/10 backdrop-blur-md">
+             <div class="p-6 border-b border-white/5">
+                <div class="flex items-center gap-4">
+                    <div class="relative">
+                        <img src="${authorAvatar}" class="w-12 h-12 rounded-full border-2 border-king-gold p-0.5">
+                        <div class="absolute -bottom-1 -right-1 bg-black rounded-full p-0.5">
+                            <svg class="w-4 h-4 text-king-gold" fill="currentColor" viewBox="0 0 24 24"><path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/></svg>
+                        </div>
+                    </div>
+                    <div>
+                        <p class="text-base font-bold text-white leading-tight">${authorName}</p>
+                        <p class="text-xs text-gray-400 font-medium">${authorHandle}</p>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <p class="text-gray-200 text-sm leading-relaxed">${title}</p>
+                </div>
+            </div>
+            
+            <div class="p-6 bg-gradient-to-b from-transparent to-black/50">
+                <!-- Action Buttons: Download All Photos -->
+                <div class="mb-8">
+                     <button onclick="triggerBatchDownload(this)" data-images='${JSON.stringify(images)}' data-title="${(title || 'slideshow').substring(0, 20)}" class="w-full bg-gradient-to-r from-king-gold to-yellow-500 hover:from-yellow-400 hover:to-yellow-500 text-black py-4 px-6 rounded-2xl font-bold text-lg transition-all shadow-xl shadow-yellow-500/20 hover:shadow-yellow-500/40 hover:scale-[1.01] flex items-center justify-center gap-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 icon-default" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        <span class="text-default">Download All ${images.length} Photos (ZIP)</span>
+                        <span class="text-loading hidden">Creating ZIP...</span>
+                     </button>
+                     <p class="text-center text-xs text-gray-500 mt-3">High Quality • Watermark Free</p>
+                </div>
+
+                <!-- Carousel Container -->
+                <div class="relative -mx-6 px-6">
+                    <div class="flex overflow-x-auto snap-x snap-mandatory gap-6 pb-8 scrollbar-hide">
+                        ${imagesHtml}
+                        <!-- Spacer for end padding -->
+                        <div class="shrink-0 w-6"></div> 
+                    </div>
+                    
+                    <!-- Scroll Hint/Fade -->
+                    <div class="absolute top-0 right-0 bottom-8 w-12 bg-gradient-to-l from-black/80 to-transparent pointer-events-none"></div>
+                </div>
+                
+                 <div class="flex items-center justify-between text-xs text-gray-500 border-t border-white/5 pt-4 font-mono">
+                    <span class="flex items-center gap-1.5"><svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg> ${data.play_count ? data.play_count.toLocaleString() : '0'}</span>
+                    <span class="flex items-center gap-1.5"><svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg> ${data.digg_count ? data.digg_count.toLocaleString() : '0'}</span>
+                </div>
+            </div>
+        </div>
+        `;
+    }
+
+    // Video Card
+    const downloadUrl = data.play || data.hdplay;
+    // Use our proxy endpoint
+    const proxyDownloadUrl = `/api/download?url=${encodeURIComponent(downloadUrl)}&filename=${encodeURIComponent((data.title || 'video').substring(0, 10))}`;
+
+    return `
+        <div class="glass rounded-3xl overflow-hidden hover:shadow-2xl hover:shadow-yellow-500/10 transition-all duration-300 animate-[fadeIn_0.5s_ease-out] w-full max-w-xl bg-black/80 border border-white/10 backdrop-blur-md">
+             <div class="p-4 border-b border-white/5 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <img src="${authorAvatar}" class="w-10 h-10 rounded-full border border-gray-700">
+                    <div>
+                        <p class="text-sm font-bold text-white leading-tight">${authorName}</p>
+                        <p class="text-xs text-gray-500">@${data.author.unique_id}</p>
+                    </div>
+                </div>
+                 <div class="bg-white/5 px-2 py-1 rounded text-xs font-mono text-gray-300">
+                    ${data.duration || '0'}s
+                </div>
+            </div>
+
+            <div class="relative group aspect-[9/16] bg-gray-900 border-y border-white/5">
+                <img src="${data.cover}" alt="${title}" class="w-full h-full object-cover">
+                <div class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all backdrop-blur-[2px]">
+                     
+                     <div class="transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300">
+                        <button onclick="triggerDownload('${proxyDownloadUrl}', this)" class="bg-king-gold hover:bg-yellow-400 text-black px-8 py-3 rounded-full font-bold shadow-xl shadow-yellow-500/20 flex items-center gap-2 transform hover:scale-105 transition-all">
+                             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 icon-default" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            <span class="text-default">Download Video</span>
+                             <span class="text-loading hidden">Downloading...</span>
+                            <svg class="animate-spin h-5 w-5 text-black icon-loading hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </button>
+                     </div>
+
+                </div>
+            </div>
+            
+            <div class="p-5">
+                <p class="text-gray-300 text-sm line-clamp-2 mb-4 h-10 leading-relaxed">${title}</p>
+
+                <div class="flex items-center justify-between text-xs text-gray-500 border-t border-white/5 pt-3 font-mono">
+                    <span class="flex items-center gap-1.5"><svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg> ${data.play_count ? data.play_count.toLocaleString() : '0'}</span>
+                    <span class="flex items-center gap-1.5"><svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg> ${data.digg_count ? data.digg_count.toLocaleString() : '0'}</span>
+                </div>
             </div>
         </div>
     `;
@@ -197,7 +346,9 @@ async function processSingle() {
     loading.classList.add('hidden');
     loading.classList.remove('flex');
 
-    if (data && data.id) {
+    if (data && data.error) {
+        alert(data.error);
+    } else if (data && (data.id || data.images)) {
         saveToHistory(data); // Save to history
         results.innerHTML = createResultCard(data);
     } else {
@@ -260,3 +411,4 @@ function clearHistory() {
         loadHistory();
     }
 }
+

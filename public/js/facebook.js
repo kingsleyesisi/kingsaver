@@ -34,10 +34,16 @@ async function fetchVideoData(url) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ url })
         });
-        return await response.json();
+        const data = await response.json();
+        
+        if (!response.ok) {
+            return { error: data.details || data.error || 'Failed to fetch video' };
+        }
+        
+        return data;
     } catch (error) {
         console.error("Error:", error);
-        return null;
+        return { error: 'Network error or server is down' };
     }
 }
 
@@ -49,6 +55,60 @@ function createResultCard(data) {
     const authorName = data.uploader || 'Facebook User';
     const authorHandle = data.uploader_id ? `@${data.uploader_id}` : '';
     const title = data.description || data.title || 'Facebook Video';
+
+    // Check for slideshow
+    if (data.type === 'slideshow' || (data.images && data.images.length > 0)) {
+        let imagesHtml = '';
+        data.images.forEach((img, index) => {
+            const imgDownloadUrl = `/api/download?url=${encodeURIComponent(img)}&filename=${encodeURIComponent((data.title || 'image') + '_' + index)}`;
+            
+            imagesHtml += `
+            <div class="relative group rounded-xl overflow-hidden mb-4 border border-gray-800">
+                <img src="${img}" class="w-full h-auto object-cover">
+                <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40">
+                     <button onclick="triggerDownload('${imgDownloadUrl}', this)" class="bg-blue-600 text-white p-3 rounded-full shadow-lg transform scale-90 group-hover:scale-110 transition-transform">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 icon-default" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
+                        </svg>
+                     </button>
+                </div>
+            </div>`;
+        });
+
+        return `
+        <div class="glass rounded-2xl overflow-hidden hover:shadow-2xl hover:shadow-blue-500/10 transition-all duration-300 animate-[fadeIn_0.5s_ease-out] w-full max-w-2xl bg-black border border-gray-800 p-6">
+             <div class="flex items-start justify-between mb-4">
+                <div class="flex items-start gap-4">
+                    <div class="flex-shrink-0">
+                         <div class="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center overflow-hidden border border-gray-700">
+                            <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M9 8h-3v4h3v12h5v-12h3.642l.358-4h-4v-1.667c0-.955.192-1.333 1.115-1.333h2.885v-5h-3.808c-3.596 0-5.192 1.583-5.192 4.615v3.385z"/></svg>
+                        </div>
+                    </div>
+                    <div class="flex-grow min-w-0">
+                        <h3 class="text-lg font-bold text-white truncate">${authorName}</h3>
+                        <p class="text-sm text-gray-400">${authorHandle}</p>
+                    </div>
+                </div>
+            </div>
+            <p class="text-gray-300 text-sm mb-4">${title}</p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                ${imagesHtml}
+            </div>
+            
+             <div class="flex items-center justify-center gap-4 text-xs text-gray-500 border-t border-gray-800 pt-3 mt-4">
+                 <div class="flex items-center gap-2 bg-gray-900/50 p-2 rounded-lg justify-center">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                    <span>${data.view_count ? data.view_count.toLocaleString() : 'N/A'}</span>
+                </div>
+                <div class="flex items-center gap-2 bg-gray-900/50 p-2 rounded-lg justify-center">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
+                    <span>${data.like_count ? data.like_count.toLocaleString() : 'N/A'}</span>
+                </div>
+            </div>
+        </div>
+        `;
+    }
 
     return `
         <div class="glass rounded-2xl overflow-hidden hover:shadow-2xl hover:shadow-blue-500/10 transition-all duration-300 animate-[fadeIn_0.5s_ease-out] w-full max-w-2xl bg-black border border-gray-800">
@@ -126,7 +186,9 @@ async function processSingle() {
     loading.classList.add('hidden');
     loading.classList.remove('flex');
 
-    if (data && data.id) {
+    if (data && data.error) {
+        alert(data.error);
+    } else if (data && (data.id || data.images)) {
         // Enhance data object with cache-friendly properties if needed
         data.sourceUrl = url;
         data.timestamp = Date.now();

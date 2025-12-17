@@ -34,6 +34,11 @@ function extractVideoId(url) {
 }
 
 async function getTikTokData(videoUrl) {
+    // Validation
+    if (!videoUrl.match(/tiktok\.com/i)) {
+         throw new Error('Invalid URL. This looks like it might belong to another platform. Please use a TikTok link.');
+    }
+
     try {
         const fullUrl = await expandUrl(videoUrl);
         const videoId = extractVideoId(fullUrl);
@@ -54,7 +59,19 @@ async function getTikTokData(videoUrl) {
             throw new Error(`API Error: ${response.data.msg || 'Failed to get video information'}`);
         }
 
-        return response.data.data;
+        const data = response.data.data;
+        
+        // Check for images/slideshow
+        // User requested logic: if duration is 0, it should be treated as a slideshow
+        if ((data.images && Array.isArray(data.images) && data.images.length > 0) || data.duration === 0) {
+            data.type = 'slideshow';
+            // Ensure we have an images array even if inferred from duration (though valid API response should have it)
+            if (!data.images) data.images = []; 
+        } else {
+            data.type = 'video';
+        }
+
+        return data;
     } catch (error) {
         console.error('[ERROR] Fetching data:', error.message);
         throw error;

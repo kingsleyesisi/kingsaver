@@ -1,6 +1,11 @@
 const { getVideoInfo, getDownloadStream } = require('./video_downloader');
 
 const getInstagramInfo = async (url) => {
+    // Validation
+    if (!url.match(/instagram\.com|instagr\.am/i)) {
+        throw new Error('Invalid URL. This looks like it might belong to another platform. Please use an Instagram link.');
+    }
+
     try {
         const info = await getVideoInfo(url);
         

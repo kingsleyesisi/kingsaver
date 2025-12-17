@@ -240,10 +240,26 @@ app.get('/api/download', async (req, res) => {
             safeFilename = safeFilename.substring(0, 10);
         }
             
-        const contentDisposition = `attachment; filename="${safeFilename}.mp4"`;
+        const contentType = response.headers['content-type'] || 'video/mp4';
+        
+        let extension = '.mp4';
+        if (contentType.includes('image/jpeg')) extension = '.jpg';
+        else if (contentType.includes('image/png')) extension = '.png';
+        else if (contentType.includes('image/webp')) extension = '.webp';
+        else if (contentType.includes('video/webm')) extension = '.webm';
+        else if (contentType.includes('audio/mpeg')) extension = '.mp3';
+        
+        // If filename already has an extension, use it, otherwise append
+        if (safeFilename.length > 10) {
+             // Keep the start of the filename but ensure extension is preserved if we were strictly trimming
+             // But here we are building the filename, so just trim the base name
+             safeFilename = safeFilename.substring(0, 10);
+        }
+
+        const contentDisposition = `attachment; filename="${safeFilename}${extension}"`;
 
         res.setHeader('Content-Disposition', contentDisposition);
-        res.setHeader('Content-Type', response.headers['content-type'] || 'video/mp4');
+        res.setHeader('Content-Type', contentType);
 
         response.data.pipe(res);
     } catch (error) {
@@ -254,6 +270,63 @@ app.get('/api/download', async (req, res) => {
 
 // Serve index.html for root is handled by express.static
 
+// ZIP Download Endpoint
+const archiver = require('archiver');
+
+app.get('/api/download-zip', async (req, res) => {
+    try {
+        const { urls, filename } = req.query;
+        if (!urls) return res.status(400).send('URLs are required');
+        
+        const urlArray = Array.isArray(urls) ? urls : [urls];
+        const safeFilename = (filename || 'images').replace(/[^a-zA-Z0-9._-]/g, '_').substring(0, 50);
+
+        res.setHeader('Content-Type', 'application/zip');
+        res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}.zip"`);
+
+        const archive = archiver('zip', {
+            zlib: { level: 9 } // Sets the compression level.
+        });
+
+        archive.on('error', (err) => {
+            console.error('Archive error:', err);
+             if (!res.headersSent) res.status(500).send({ error: err.message });
+        });
+
+        archive.pipe(res);
+
+        for (let i = 0; i < urlArray.length; i++) {
+            const url = urlArray[i];
+            try {
+                const response = await axios({
+                    method: 'GET',
+                    url: url,
+                    responseType: 'stream'
+                });
+                
+                // Determine extension
+                let extension = '.jpg';
+                const contentType = response.headers['content-type'];
+                 if (contentType) {
+                    if (contentType.includes('image/png')) extension = '.png';
+                    else if (contentType.includes('image/webp')) extension = '.webp';
+                    else if (contentType.includes('image/jpeg')) extension = '.jpg';
+                 }
+                
+                archive.append(response.data, { name: `image_${i + 1}${extension}` });
+            } catch (err) {
+                 console.error(`Failed to download image ${url} for zip:`, err.message);
+                 // We continue even if one fails, or we could append an error text file
+            }
+        }
+
+        await archive.finalize();
+
+    } catch (error) {
+        console.error('Error in /api/download-zip:', error.message);
+        if (!res.headersSent) res.status(500).send('Failed to create zip');
+    }
+});
 
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
