@@ -33,10 +33,29 @@ const getVideoInfo = async (url) => {
              return cached.data;
         }
 
+        // Check for cookies.txt in project root
+        const cookiesPath = path.join(process.cwd(), 'cookies.txt');
+        const hasCookies = fs.existsSync(cookiesPath);
+        
+        if (hasCookies) {
+            console.log('[Downloader] Found cookies.txt, using for authentication.');
+        } else {
+            console.log('[Downloader] No cookies.txt found. Instagram downloads likely to fail.');
+        }
+
         let data;
         try {
             data = await new Promise((resolve, reject) => {
-                const process = spawn(ytDlpPath, ['--dump-json', '--ignore-no-formats-error', '--no-warnings', url]);
+                const args = ['--dump-json', '--ignore-no-formats-error', '--no-warnings', url];
+                if (hasCookies) {
+                    args.push('--cookies', cookiesPath);
+                }
+                
+                // Add robust User-Agent (simulating iPhone Safari) if no cookies, or let yt-dlp handle it?
+                // yt-dlp usually manages UA, but sometimes explicit helps.
+                // Let's stick to cookies mainly.
+                
+                const process = spawn(ytDlpPath, args);
                 
                 let stdout = '';
                 let stderr = '';
@@ -65,7 +84,7 @@ const getVideoInfo = async (url) => {
                     if (code !== 0) {
                         const errorMsg = stderr.split('\n').filter(line => line.includes('ERROR:')).join(' ') || stderr;
                         // specific check for "no video" error which implies it might be a photo post
-                        if (errorMsg.includes('There is no video in this post') || errorMsg.includes('No video formats found')) {
+                        if (errorMsg.includes('There is no video in this post') || errorMsg.includes('No video formats found') || errorMsg.includes('Instagram sent an empty media response')) {
                              reject(new Error('NO_VIDEO_FOUND'));
                         } else {
                              reject(new Error(`yt-dlp exited with code ${code}: ${errorMsg}`));
@@ -83,7 +102,7 @@ const getVideoInfo = async (url) => {
                  try {
                      const response = await axios.get(url, {
                          headers: {
-                             'User-Agent': 'Mozilla/5.0 (Linux; Android 10; SM-G960F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Mobile Safari/537.36',
+                             'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1', // Modern Mobile UA
                              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
                              'Accept-Language': 'en-US,en;q=0.9',
                              'Sec-Fetch-Dest': 'document',
@@ -270,7 +289,8 @@ const getVideoInfo = async (url) => {
                      
                  } catch (scrapeError) {
                      console.error('[Downloader] Fallback scraping failed:', scrapeError.message);
-                     throw new Error('Failed to fetch content: ' + ytError.message); // Return original error if fallback fails
+                     const authMsg = hasCookies ? '' : ' Instagram requires authentication. Please add a valid cookies.txt file to the project root.';
+                     throw new Error('Failed to fetch content: ' + ytError.message + authMsg); // Return original error with check
                  }
              } else {
                  throw ytError;
@@ -335,10 +355,11 @@ const getDownloadStream = (url) => {
     // or we can enforce mp4.
     const args = ['-o', '-', url];
     
-    // If we want to ensure mp4 (might cause re-encoding which is slow):
-    // const args = ['-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best', '-o', '-', url];
-    // For now, let's stick to default best but maybe hint generic mp4 preference if possible
-    // or just let it be. 'best' is usually fine.
+    // Check for cookies.txt in project root for download stream too
+    const cookiesPath = path.join(process.cwd(), 'cookies.txt');
+    if (fs.existsSync(cookiesPath)) {
+        args.push('--cookies', cookiesPath);
+    }
     
     const ytDlpProcess = spawn(ytDlpPath, args);
     
