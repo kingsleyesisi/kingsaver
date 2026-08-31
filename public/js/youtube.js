@@ -47,6 +47,72 @@ window.triggerDownload = async function(originalUrl, btnElement) {
     }, 4000);
 }
 
+// Caption Management and Utilities
+window.captionStore = window.captionStore || {};
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return String(text).replace(/[&<>"']/g, m => map[m]);
+}
+
+window.copyCaption = async function(captionId, btnElement) {
+    const text = window.captionStore[captionId] || '';
+    if (!text) return;
+
+    let copied = false;
+    if (navigator.clipboard && window.isSecureContext) {
+        try {
+            await navigator.clipboard.writeText(text);
+            copied = true;
+        } catch (err) {
+            console.warn('Clipboard API failed, using fallback', err);
+        }
+    }
+    
+    if (!copied) {
+        try {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            textarea.style.left = '-9999px';
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+            copied = document.execCommand('copy');
+            document.body.removeChild(textarea);
+        } catch (err) {
+            console.error('Fallback copy failed', err);
+        }
+    }
+
+    if (copied && btnElement) {
+        const copyIcon = btnElement.querySelector('.icon-copy');
+        const checkIcon = btnElement.querySelector('.icon-check');
+        const textSpan = btnElement.querySelector('.btn-text');
+
+        if (copyIcon) copyIcon.classList.add('hidden');
+        if (checkIcon) checkIcon.classList.remove('hidden');
+        if (textSpan) textSpan.innerText = 'Copied!';
+
+        btnElement.classList.add('bg-green-500/20', 'text-green-300', 'border-green-500/40');
+
+        setTimeout(() => {
+            if (copyIcon) copyIcon.classList.remove('hidden');
+            if (checkIcon) checkIcon.classList.add('hidden');
+            if (textSpan) textSpan.innerText = 'Copy';
+            btnElement.classList.remove('bg-green-500/20', 'text-green-300', 'border-green-500/40');
+        }, 2000);
+    }
+};
+
 function createResultCard(data, originalUrl) {
     let qualityOptions = '';
     
@@ -73,22 +139,38 @@ function createResultCard(data, originalUrl) {
         qualityOptions = '<option disabled>No formats found</option>';
     }
     
-    const duration = new Date(data.duration * 1000).toISOString().substr(11, 8).replace(/^00:/, '');
+    const duration = data.duration ? new Date(Number(data.duration) * 1000).toISOString().substr(11, 8).replace(/^00:/, '') : '0:00';
+    const title = data.title || 'YouTube Video';
+    const captionId = 'yt_' + (data.id || Math.random().toString(36).substring(2, 9));
+    window.captionStore[captionId] = title;
 
     return `
         <div class="glass rounded-2xl overflow-hidden shadow-2xl w-full max-w-2xl animate-[fadeIn_0.5s_ease-out]">
             <div class="flex flex-col md:flex-row">
                 <div class="w-full md:w-1/2 aspect-video md:aspect-auto bg-black relative">
-                    <img src="${data.thumbnail}" alt="${data.title}" class="w-full h-full object-cover">
+                    <img src="${data.thumbnail}" alt="${escapeHtml(title)}" class="w-full h-full object-cover">
                     <div class="absolute bottom-2 right-2 bg-black/80 px-2 py-1 rounded text-xs text-white">
                         ${duration}
                     </div>
                 </div>
-                    <div class="p-6 w-full md:w-1/2 flex flex-col">
-                    <h3 class="text-xl font-bold text-white line-clamp-2 mb-2" title="${data.title}">${data.title}</h3>
-                    <div class="flex items-center gap-2 mb-4">
-                        ${data.author.avatar ? `<img src="${data.author.avatar}" class="w-6 h-6 rounded-full">` : ''}
-                        <p class="text-sm text-gray-400">${data.author.name}</p>
+                <div class="p-6 w-full md:w-1/2 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-start justify-between gap-2 mb-2">
+                            <h3 class="text-lg font-bold text-white leading-snug line-clamp-2" title="${escapeHtml(title)}">${escapeHtml(title)}</h3>
+                            <button onclick="copyCaption('${captionId}', this)" class="px-2 py-1 rounded-lg bg-white/10 hover:bg-red-600 hover:text-white text-gray-300 text-xs font-medium transition-all flex items-center gap-1 shrink-0 cursor-pointer border border-white/10 shadow-sm" title="Copy title">
+                                <svg class="w-3.5 h-3.5 icon-copy" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                                </svg>
+                                <svg class="w-3.5 h-3.5 icon-check hidden text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                </svg>
+                                <span class="btn-text text-xs">Copy</span>
+                            </button>
+                        </div>
+                        <div class="flex items-center gap-2 mb-4">
+                            ${data.author?.avatar ? `<img src="${data.author.avatar}" class="w-6 h-6 rounded-full">` : ''}
+                            <p class="text-sm text-gray-400">${data.author?.name || 'YouTube Creator'}</p>
+                        </div>
                     </div>
                     
                     <div class="mt-auto space-y-3">
@@ -106,7 +188,7 @@ function createResultCard(data, originalUrl) {
                         </div>
 
                         <button onclick="triggerDownload('${originalUrl}', this)" 
-                            class="w-full bg-gradient-to-r from-red-600 to-red-800 hover:from-red-700 hover:to-red-900 text-white font-bold py-3 px-4 rounded-lg shadow-lg hover:shadow-red-500/20 transform hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2">
+                            class="w-full bg-gradient-to-r from-red-600 to-red-800 hover:from-red-700 hover:to-red-900 text-white font-bold py-3 px-4 rounded-lg shadow-lg hover:shadow-red-500/20 transform hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2 cursor-pointer">
                             <span>Download</span>
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                                 <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />

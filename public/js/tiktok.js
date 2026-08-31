@@ -175,7 +175,188 @@ async function triggerBatchDownload(btnElement) {
 }
 
 
-function createResultCard(data) {
+// Caption Management and Utilities
+window.captionStore = window.captionStore || {};
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return String(text).replace(/[&<>"']/g, m => map[m]);
+}
+
+window.copyCaption = async function(captionId, btnElement) {
+    const text = window.captionStore[captionId] || '';
+    if (!text) return;
+
+    let copied = false;
+    if (navigator.clipboard && window.isSecureContext) {
+        try {
+            await navigator.clipboard.writeText(text);
+            copied = true;
+        } catch (err) {
+            console.warn('Clipboard API failed, using fallback', err);
+        }
+    }
+    
+    if (!copied) {
+        try {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            textarea.style.left = '-9999px';
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+            copied = document.execCommand('copy');
+            document.body.removeChild(textarea);
+        } catch (err) {
+            console.error('Fallback copy failed', err);
+        }
+    }
+
+    if (copied && btnElement) {
+        const copyIcon = btnElement.querySelector('.icon-copy');
+        const checkIcon = btnElement.querySelector('.icon-check');
+        const textSpan = btnElement.querySelector('.btn-text');
+
+        if (copyIcon) copyIcon.classList.add('hidden');
+        if (checkIcon) checkIcon.classList.remove('hidden');
+        if (textSpan) textSpan.innerText = 'Copied!';
+
+        btnElement.classList.add('bg-green-500/20', 'text-green-300', 'border-green-500/40');
+
+        setTimeout(() => {
+            if (copyIcon) copyIcon.classList.remove('hidden');
+            if (checkIcon) checkIcon.classList.add('hidden');
+            if (textSpan) textSpan.innerText = 'Copy';
+            btnElement.classList.remove('bg-green-500/20', 'text-green-300', 'border-green-500/40');
+        }, 2000);
+    }
+};
+
+window.toggleCaption = function(captionId) {
+    const body = document.getElementById(`caption-body-${captionId}`);
+    const chevron = document.getElementById(`caption-chevron-${captionId}`);
+    const preview = document.getElementById(`caption-preview-${captionId}`);
+
+    if (body) {
+        const isHidden = body.classList.contains('hidden');
+        if (isHidden) {
+            body.classList.remove('hidden');
+            if (chevron) chevron.classList.add('rotate-180');
+            if (preview) preview.classList.add('opacity-40');
+        } else {
+            body.classList.add('hidden');
+            if (chevron) chevron.classList.remove('rotate-180');
+            if (preview) preview.classList.remove('opacity-40');
+        }
+    }
+};
+
+function renderCaptionComponent(title, captionId, isBulk = false, accentColor = 'gold') {
+    if (!title || !title.trim()) {
+        return '';
+    }
+
+    window.captionStore[captionId] = title;
+    const escapedTitle = escapeHtml(title);
+    
+    const accentColors = {
+        gold: {
+            text: 'text-king-gold',
+            hoverBg: 'hover:bg-king-gold',
+            glow: 'hover:border-king-gold/40'
+        },
+        purple: {
+            text: 'text-pink-400',
+            hoverBg: 'hover:bg-pink-500',
+            glow: 'hover:border-pink-500/40'
+        },
+        blue: {
+            text: 'text-blue-400',
+            hoverBg: 'hover:bg-blue-600',
+            glow: 'hover:border-blue-500/40'
+        },
+        white: {
+            text: 'text-white',
+            hoverBg: 'hover:bg-white',
+            glow: 'hover:border-white/40'
+        }
+    };
+    
+    const theme = accentColors[accentColor] || accentColors.gold;
+
+    if (isBulk) {
+        // Collapsed accordion view by default for bulk downloads to save vertical space
+        return `
+        <div class="mt-4 mb-2 rounded-2xl bg-white/[0.04] border border-white/10 overflow-hidden transition-all duration-300">
+            <div class="flex items-center justify-between p-3.5 cursor-pointer hover:bg-white/[0.07] transition-colors select-none" onclick="toggleCaption('${captionId}')">
+                <div class="flex items-center gap-2 min-w-0 pr-2">
+                    <span class="text-xs font-semibold uppercase tracking-wider ${theme.text} flex items-center gap-1.5 shrink-0">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/>
+                        </svg>
+                        Caption
+                    </span>
+                    <span id="caption-preview-${captionId}" class="text-xs text-gray-400 truncate opacity-75 transition-opacity">${escapedTitle}</span>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <button onclick="event.stopPropagation(); copyCaption('${captionId}', this)" class="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 ${theme.hoverBg} hover:text-black text-gray-300 text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer border border-white/10 shadow-sm" title="Copy caption">
+                        <svg class="w-3.5 h-3.5 icon-copy" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                        </svg>
+                        <svg class="w-3.5 h-3.5 icon-check hidden text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                        </svg>
+                        <span class="btn-text">Copy</span>
+                    </button>
+                    <button type="button" class="p-1 rounded-lg hover:bg-white/10 text-gray-400 transition-colors" title="Toggle full caption">
+                        <svg id="caption-chevron-${captionId}" class="w-4 h-4 transform transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div id="caption-body-${captionId}" class="hidden px-4 pb-4 pt-2 border-t border-white/[0.06] bg-black/30 animate-[fadeIn_0.2s_ease-out]">
+                <p class="text-gray-200 text-sm leading-relaxed whitespace-pre-wrap select-text break-words font-sans">${escapedTitle}</p>
+            </div>
+        </div>
+        `;
+    }
+
+    // Default Single View: Full caption displayed with sleek copy button
+    return `
+    <div class="mt-4 mb-2 p-4 rounded-2xl bg-white/[0.04] border border-white/10 relative group/caption transition-all hover:bg-white/[0.06]">
+        <div class="flex items-center justify-between gap-2 mb-2.5 pb-2 border-b border-white/[0.06]">
+            <span class="text-xs font-semibold uppercase tracking-wider ${theme.text} flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/>
+                </svg>
+                Caption
+            </span>
+            <button onclick="copyCaption('${captionId}', this)" class="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 ${theme.hoverBg} hover:text-black text-gray-300 text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer border border-white/10 shadow-sm" title="Copy caption">
+                <svg class="w-3.5 h-3.5 icon-copy" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                </svg>
+                <svg class="w-3.5 h-3.5 icon-check hidden text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+                <span class="btn-text">Copy</span>
+            </button>
+        </div>
+        <p class="text-gray-200 text-sm leading-relaxed whitespace-pre-wrap select-text break-words font-sans">${escapedTitle}</p>
+    </div>
+    `;
+}
+
+function createResultCard(data, isBulk = false) {
     console.log("createResultCard data:", data); // Debugging
 
     // Unified Premium Card Design
@@ -185,6 +366,7 @@ function createResultCard(data) {
     const authorHandle = author.unique_id ? `@${author.unique_id}` : '';
     const authorAvatar = author.avatar || data.upload_user_avatar || 'https://p16-sign-va.tiktokcdn.com/tos-maliva-avt-0068/77f08b1f4ddcfddda7ab521ba665cab9~tplv-tiktokx-cropcenter-q:1080:1080:q70.webp'; // Fallback
     const title = data.title || '';
+    const captionId = 'tiktok_' + (data.id || Math.random().toString(36).substring(2, 9));
     
     // Check for slideshow: Type is slideshow, OR images exist (and not empty), OR duration is 0
     // Coerce duration to number just in case
@@ -238,9 +420,7 @@ function createResultCard(data) {
                         <p class="text-xs text-gray-400 font-medium">${authorHandle}</p>
                     </div>
                 </div>
-                <div class="mt-4">
-                    <p class="text-gray-200 text-sm leading-relaxed">${title}</p>
-                </div>
+                ${renderCaptionComponent(title, captionId, isBulk, 'gold')}
             </div>
             
             <div class="p-6 bg-gradient-to-b from-transparent to-black/50">
@@ -278,49 +458,66 @@ function createResultCard(data) {
     }
 
     // Video Card
+    // Note: data.play is high-bitrate H.264 (AVC) which is 100% compatible across all devices, browsers, and media players.
+    // data.hdplay uses HEVC/H.265 which causes a black screen on web browsers and default media players without HEVC codecs.
     const downloadUrl = data.play || data.hdplay;
-    // Use our proxy endpoint
-    const proxyDownloadUrl = `/api/download?url=${encodeURIComponent(downloadUrl)}&filename=${encodeURIComponent((data.title || 'video').substring(0, 10))}`;
+    const safeTitle = (data.title || 'tiktok_video').substring(0, 30);
+    
+    // Use our high-speed proxy endpoint for instant streaming with safe filename
+    const proxyDownloadUrl = `/api/download?url=${encodeURIComponent(downloadUrl)}&filename=${encodeURIComponent(safeTitle)}`;
 
     return `
-        <div class="glass rounded-3xl overflow-hidden hover:shadow-2xl hover:shadow-yellow-500/10 transition-all duration-300 animate-[fadeIn_0.5s_ease-out] w-full max-w-xl bg-black/80 border border-white/10 backdrop-blur-md">
-             <div class="p-4 border-b border-white/5 flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                    <img src="${authorAvatar}" class="w-10 h-10 rounded-full border border-gray-700">
-                    <div>
-                        <p class="text-sm font-bold text-white leading-tight">${authorName}</p>
-                        <p class="text-xs text-gray-500">@${data.author.unique_id}</p>
+        <div class="glass rounded-3xl overflow-hidden hover:shadow-2xl hover:shadow-yellow-500/10 transition-all duration-300 animate-[fadeIn_0.5s_ease-out] w-full max-w-xl bg-black/80 border border-white/10 backdrop-blur-md flex flex-col justify-between">
+             <div>
+                 <div class="p-4 border-b border-white/5 flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <img src="${authorAvatar}" class="w-10 h-10 rounded-full border border-gray-700">
+                        <div>
+                            <p class="text-sm font-bold text-white leading-tight">${authorName}</p>
+                            <p class="text-xs text-gray-500">@${data.author?.unique_id || ''}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="bg-gradient-to-r from-yellow-500/20 to-amber-500/20 text-king-gold border border-yellow-500/30 px-2.5 py-0.5 rounded-full text-xs font-bold flex items-center gap-1 shadow-sm">
+                            <svg class="w-3 h-3 text-king-gold" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
+                            Crystal Clear HD
+                        </span>
+                        <div class="bg-white/5 px-2 py-1 rounded text-xs font-mono text-gray-300">
+                            ${data.duration || '0'}s
+                        </div>
                     </div>
                 </div>
-                 <div class="bg-white/5 px-2 py-1 rounded text-xs font-mono text-gray-300">
-                    ${data.duration || '0'}s
+
+                <div class="relative group aspect-[9/16] bg-gray-900 border-y border-white/5">
+                    <img src="${data.cover}" alt="${title}" class="w-full h-full object-cover">
+                    <div class="absolute inset-0 bg-black/50 flex flex-col items-center justify-center gap-3 opacity-0 group-hover:opacity-100 transition-all backdrop-blur-[2px]">
+                         
+                         <div class="transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300 flex flex-col items-center gap-2.5">
+                            <button onclick="triggerDownload('${proxyDownloadUrl}', this)" class="bg-gradient-to-r from-king-gold to-yellow-500 hover:from-yellow-400 hover:to-yellow-500 text-black px-8 py-3.5 rounded-2xl font-bold text-base shadow-2xl shadow-yellow-500/30 flex items-center gap-2.5 transform hover:scale-105 transition-all cursor-pointer border border-yellow-300/40">
+                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 icon-default" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                                <span class="text-default flex items-center gap-1.5">
+                                    <span>Download HD Video</span>
+                                    <span class="bg-black/20 text-black text-xs px-1.5 py-0.5 rounded font-black tracking-wider">No Watermark</span>
+                                </span>
+                                <span class="text-loading hidden">Downloading Video...</span>
+                                <svg class="animate-spin h-5 w-5 text-black icon-loading hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                            </button>
+                         </div>
+
+                    </div>
+                </div>
+                
+                <div class="p-5 pb-2">
+                    ${renderCaptionComponent(title, captionId, isBulk, 'gold')}
                 </div>
             </div>
 
-            <div class="relative group aspect-[9/16] bg-gray-900 border-y border-white/5">
-                <img src="${data.cover}" alt="${title}" class="w-full h-full object-cover">
-                <div class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all backdrop-blur-[2px]">
-                     
-                     <div class="transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300">
-                        <button onclick="triggerDownload('${proxyDownloadUrl}', this)" class="bg-king-gold hover:bg-yellow-400 text-black px-8 py-3 rounded-full font-bold shadow-xl shadow-yellow-500/20 flex items-center gap-2 transform hover:scale-105 transition-all">
-                             <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 icon-default" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                            </svg>
-                            <span class="text-default">Download Video</span>
-                             <span class="text-loading hidden">Downloading...</span>
-                            <svg class="animate-spin h-5 w-5 text-black icon-loading hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                        </button>
-                     </div>
-
-                </div>
-            </div>
-            
-            <div class="p-5">
-                <p class="text-gray-300 text-sm line-clamp-2 mb-4 h-10 leading-relaxed">${title}</p>
-
+            <div class="px-5 pb-5">
                 <div class="flex items-center justify-between text-xs text-gray-500 border-t border-white/5 pt-3 font-mono">
                     <span class="flex items-center gap-1.5"><svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg> ${data.play_count ? data.play_count.toLocaleString() : '0'}</span>
                     <span class="flex items-center gap-1.5"><svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg> ${data.digg_count ? data.digg_count.toLocaleString() : '0'}</span>
@@ -350,7 +547,7 @@ async function processSingle() {
         alert(data.error);
     } else if (data && (data.id || data.images)) {
         saveToHistory(data); // Save to history
-        results.innerHTML = createResultCard(data);
+        results.innerHTML = createResultCard(data, false);
     } else {
         alert("Failed to fetch video. Please check the link.");
     }
@@ -371,7 +568,7 @@ async function processBulk() {
         const data = await fetchVideoData(url.trim());
         if (data && data.id) {
             saveToHistory(data); // Save to history
-            results.insertAdjacentHTML('beforeend', createResultCard(data));
+            results.insertAdjacentHTML('beforeend', createResultCard(data, true));
         }
     }
 
@@ -401,7 +598,7 @@ function loadHistory() {
     }
 
     history.forEach(data => {
-        results.insertAdjacentHTML('beforeend', createResultCard(data));
+        results.insertAdjacentHTML('beforeend', createResultCard(data, false));
     });
 }
 

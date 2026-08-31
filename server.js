@@ -3,7 +3,7 @@ const cors = require('cors');
 const axios = require('axios');
 const path = require('path');
 const compression = require('compression');
-const { getTikTokData } = require('./main');
+const { getTikTokData } = require('./tiktok');
 const { getYouTubeInfo, getYouTubeDownloadStream } = require('./youtube');
 const { getTwitterInfo, getTwitterDownloadStream } = require('./twitter');
 const { pool, initDb } = require('./db');
@@ -303,17 +303,20 @@ app.get('/api/download', async (req, res) => {
         const response = await axios({
             method: 'GET',
             url: url,
-            responseType: 'stream'
+            responseType: 'stream',
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Referer': 'https://www.tiktok.com/'
+            }
         });
 
         // Sanitize filename to ensure it only contains safe characters for headers
-        // And strictly limit to 10 characters max
         let safeFilename = filename 
             ? filename.replace(/[^a-zA-Z0-9._-]/g, '_') 
             : 'video';
             
-        if (safeFilename.length > 10) {
-            safeFilename = safeFilename.substring(0, 10);
+        if (safeFilename.length > 50) {
+            safeFilename = safeFilename.substring(0, 50);
         }
             
         const contentType = response.headers['content-type'] || 'video/mp4';
@@ -324,13 +327,6 @@ app.get('/api/download', async (req, res) => {
         else if (contentType.includes('image/webp')) extension = '.webp';
         else if (contentType.includes('video/webm')) extension = '.webm';
         else if (contentType.includes('audio/mpeg')) extension = '.mp3';
-        
-        // If filename already has an extension, use it, otherwise append
-        if (safeFilename.length > 10) {
-             // Keep the start of the filename but ensure extension is preserved if we were strictly trimming
-             // But here we are building the filename, so just trim the base name
-             safeFilename = safeFilename.substring(0, 10);
-        }
 
         const contentDisposition = `attachment; filename="${safeFilename}${extension}"`;
 

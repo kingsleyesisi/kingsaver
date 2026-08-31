@@ -12,15 +12,15 @@ async function expandUrl(url) {
             return response.request.res.responseUrl || url; // axios follows redirects, responseUrl is the final one
         } catch (error) {
             // If HEAD fails, try GET (some servers block HEAD)
-             try {
+            try {
                 const response = await axios.get(url, {
                     maxRedirects: 5,
                     validateStatus: status => status >= 200 && status < 400
                 });
                 return response.request.res.responseUrl || url;
             } catch (err) {
-                 console.warn(`Failed to expand URL ${url}: ${err.message}`);
-                 return url;
+                console.warn(`Failed to expand URL ${url}: ${err.message}`);
+                return url;
             }
         }
     }
@@ -36,20 +36,20 @@ function extractVideoId(url) {
 async function getTikTokData(videoUrl) {
     // Validation
     if (!videoUrl.match(/tiktok\.com/i)) {
-         throw new Error('Invalid URL. This looks like it might belong to another platform. Please use a TikTok link.');
+        throw new Error('Invalid URL. This looks like it might belong to another platform. Please use a TikTok link.');
     }
 
     try {
         const fullUrl = await expandUrl(videoUrl);
         const videoId = extractVideoId(fullUrl);
-        
+
         if (!videoId) {
             console.warn(`Could not extract video ID from ${fullUrl}. Sending original URL to API.`);
         }
 
         const apiUrl = 'https://www.tikwm.com/api/';
         console.log(`[INFO] Fetching data for: ${fullUrl}`);
-        
+
         const response = await axios.post(apiUrl, {
             url: fullUrl,
             hd: 1
@@ -60,13 +60,13 @@ async function getTikTokData(videoUrl) {
         }
 
         const data = response.data.data;
-        
+
         // Check for images/slideshow
         // User requested logic: if duration is 0, it should be treated as a slideshow
         if ((data.images && Array.isArray(data.images) && data.images.length > 0) || data.duration === 0) {
             data.type = 'slideshow';
             // Ensure we have an images array even if inferred from duration (though valid API response should have it)
-            if (!data.images) data.images = []; 
+            if (!data.images) data.images = [];
         } else {
             data.type = 'video';
         }
@@ -81,7 +81,7 @@ async function getTikTokData(videoUrl) {
 // Function to sanitize filenames
 function sanitizeFileName(fileName) {
     return fileName
-        .replace(/[<>:"/\\|?*\x00-\x1F]/g, '') 
+        .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
         .substring(0, 100);
 }
 
