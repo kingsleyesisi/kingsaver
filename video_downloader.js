@@ -96,10 +96,9 @@ const getVideoInfo = async (url) => {
                 });
             });
         } catch (ytError) {
-             if (ytError.message === 'NO_VIDEO_FOUND') {
-                 console.log('[Downloader] No video found by yt-dlp, attempting fallback for images...');
-                 // Fallback to basic scraping for images
-                 try {
+             console.log('[Downloader] yt-dlp error, attempting fallback scraping...', ytError.message);
+             // Fallback to basic scraping for media and images
+             try {
                      const response = await axios.get(url, {
                          headers: {
                              'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1', // Modern Mobile UA
@@ -289,12 +288,8 @@ const getVideoInfo = async (url) => {
                      
                  } catch (scrapeError) {
                      console.error('[Downloader] Fallback scraping failed:', scrapeError.message);
-                     const authMsg = hasCookies ? '' : ' Instagram requires authentication. Please add a valid cookies.txt file to the project root.';
-                     throw new Error('Failed to fetch content: ' + ytError.message + authMsg); // Return original error with check
+                     throw new Error('Failed to fetch content: ' + ytError.message);
                  }
-             } else {
-                 throw ytError;
-             }
         }
 
         const result = {
