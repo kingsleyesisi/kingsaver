@@ -68,8 +68,11 @@ app.use((req, res, next) => {
     next();
 });
 
+// API Router definition for universal Vercel & local routing
+const apiRouter = express.Router();
+
 // Stats API Endpoint (Private)
-app.get('/api/stats', async (req, res) => {
+apiRouter.get('/stats', async (req, res) => {
     // Basic Auth
     const authHeader = req.headers.authorization;
     if (!authHeader) {
@@ -113,8 +116,8 @@ app.get('/api/stats', async (req, res) => {
     }
 });
 
-// API Endpoint to get video info
-app.post('/api/info', async (req, res) => {
+// TikTok API Endpoint
+apiRouter.post('/info', async (req, res) => {
     try {
         const { url } = req.body;
         if (!url) {
@@ -124,67 +127,64 @@ app.post('/api/info', async (req, res) => {
         const data = await getTikTokData(url);
         res.json(data);
     } catch (error) {
-        console.error('Error in /api/info:', error.message);
+        console.error('Error in /info:', error.message);
         res.status(500).json({ error: 'Failed to fetch video data', details: error.message });
     }
 });
 
 // YouTube API Endpoints
-app.post('/api/youtube/info', async (req, res) => {
+apiRouter.post('/youtube/info', async (req, res) => {
     try {
         const { url } = req.body;
         if (!url) return res.status(400).json({ error: 'URL is required' });
         const data = await getYouTubeInfo(url);
         res.json(data);
     } catch (error) {
-        console.error('Error in /api/youtube/info:', error.message);
+        console.error('Error in /youtube/info:', error.message);
         res.status(500).json({ error: 'Failed to fetch video data', details: error.message });
     }
 });
 
-app.get('/api/youtube/download', async (req, res) => {
+apiRouter.get('/youtube/download', async (req, res) => {
     try {
         const { url, itag } = req.query;
         if (!url || !itag) return res.status(400).send('URL and itag are required');
 
         const stream = getYouTubeDownloadStream(url, itag);
         
-        // We can't easily know the filename beforehand without another info fetch or just generic name
-        // We'll use a generic name with a timestamp
         res.setHeader('Content-Disposition', `attachment; filename="king_saver_video_${Date.now()}.mp4"`);
         res.setHeader('Content-Type', 'video/mp4');
 
         stream.pipe(res).on('error', (err) => {
             console.error('Response pipe error:', err);
-            // Response might be partially sent, so we can't easily send 500 here if headers sent
         });
         
         stream.on('error', (err) => {
             console.error('Stream error:', err);
              if (!res.headersSent) res.status(500).send('Download failed');
-             else res.end(); // Ensure response ends if headers were sent
+             else res.end();
         });
 
     } catch (error) {
-        console.error('Error in /api/youtube/download:', error.message);
+        console.error('Error in /youtube/download:', error.message);
         res.status(500).send('Failed to initiate download');
     }
 });
 
 // Twitter API Endpoints
-app.post('/api/twitter/info', async (req, res) => {
+apiRouter.post('/twitter/info', async (req, res) => {
     try {
         const { url } = req.body;
         if (!url) return res.status(400).json({ error: 'URL is required' });
         const data = await getTwitterInfo(url);
         res.json(data);
     } catch (error) {
-        console.error('Error in /api/twitter/info:', error.message);
+        console.error('Error in /twitter/info:', error.message);
         res.status(500).json({ error: 'Failed to fetch video data', details: error.message });
     }
 });
 
-app.get('/api/twitter/download', async (req, res) => {
+apiRouter.get('/twitter/download', async (req, res) => {
     try {
         const { url } = req.query;
         if (!url) return res.status(400).send('URL is required');
@@ -205,7 +205,7 @@ app.get('/api/twitter/download', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error in /api/twitter/download:', error.message);
+        console.error('Error in /twitter/download:', error.message);
         res.status(500).send('Failed to initiate download');
     }
 });
@@ -213,19 +213,19 @@ app.get('/api/twitter/download', async (req, res) => {
 // Instagram API Endpoints
 const { getInstagramInfo, getInstagramDownloadStream } = require('./instagram');
 
-app.post('/api/instagram/info', async (req, res) => {
+apiRouter.post('/instagram/info', async (req, res) => {
     try {
         const { url } = req.body;
         if (!url) return res.status(400).json({ error: 'URL is required' });
         const data = await getInstagramInfo(url);
         res.json(data);
     } catch (error) {
-        console.error('Error in /api/instagram/info:', error.message);
+        console.error('Error in /instagram/info:', error.message);
         res.status(500).json({ error: 'Failed to fetch video data', details: error.message });
     }
 });
 
-app.get('/api/instagram/download', async (req, res) => {
+apiRouter.get('/instagram/download', async (req, res) => {
     try {
         const { url } = req.query;
         if (!url) return res.status(400).send('URL is required');
@@ -246,7 +246,7 @@ app.get('/api/instagram/download', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error in /api/instagram/download:', error.message);
+        console.error('Error in /instagram/download:', error.message);
         res.status(500).send('Failed to initiate download');
     }
 });
@@ -254,19 +254,19 @@ app.get('/api/instagram/download', async (req, res) => {
 // Facebook API Endpoints
 const { getFacebookInfo, getFacebookDownloadStream } = require('./facebook');
 
-app.post('/api/facebook/info', async (req, res) => {
+apiRouter.post('/facebook/info', async (req, res) => {
     try {
         const { url } = req.body;
         if (!url) return res.status(400).json({ error: 'URL is required' });
         const data = await getFacebookInfo(url);
         res.json(data);
     } catch (error) {
-        console.error('Error in /api/facebook/info:', error.message);
+        console.error('Error in /facebook/info:', error.message);
         res.status(500).json({ error: 'Failed to fetch video data', details: error.message });
     }
 });
 
-app.get('/api/facebook/download', async (req, res) => {
+apiRouter.get('/facebook/download', async (req, res) => {
     try {
         const { url } = req.query;
         if (!url) return res.status(400).send('URL is required');
@@ -287,13 +287,13 @@ app.get('/api/facebook/download', async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Error in /api/facebook/download:', error.message);
+        console.error('Error in /facebook/download:', error.message);
         res.status(500).send('Failed to initiate download');
     }
 });
 
-// API Endpoint to download video (proxy to avoid CORS/Hotlinking issues)
-app.get('/api/download', async (req, res) => {
+// Video Streaming Proxy Endpoint
+apiRouter.get('/download', async (req, res) => {
     try {
         const { url, filename } = req.query;
         if (!url) {
@@ -305,12 +305,12 @@ app.get('/api/download', async (req, res) => {
             url: url,
             responseType: 'stream',
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                'Referer': 'https://www.tiktok.com/'
-            }
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+            },
+            timeout: 30000
         });
 
-        // Sanitize filename to ensure it only contains safe characters for headers
+        // Sanitize filename
         let safeFilename = filename 
             ? filename.replace(/[^a-zA-Z0-9._-]/g, '_') 
             : 'video';
@@ -328,28 +328,20 @@ app.get('/api/download', async (req, res) => {
         else if (contentType.includes('video/webm')) extension = '.webm';
         else if (contentType.includes('audio/mpeg')) extension = '.mp3';
 
-        const contentDisposition = `attachment; filename="${safeFilename}${extension}"`;
-
-        res.setHeader('Content-Disposition', contentDisposition);
+        res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}${extension}"`);
         res.setHeader('Content-Type', contentType);
 
         response.data.pipe(res);
     } catch (error) {
-        console.error('Error in /api/download:', error.message);
-        res.status(500).send('Failed to download video');
+        console.error('Error in /download proxy:', error.message);
+        if (!res.headersSent) res.status(500).send('Failed to download video');
     }
-});
-
-// Serve index.html for root is handled by express.static
-// But for clean URLs locally:
-app.get('/stats', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'stats.html'));
 });
 
 // ZIP Download Endpoint
 const archiver = require('archiver');
 
-app.get('/api/download-zip', async (req, res) => {
+apiRouter.get('/download-zip', async (req, res) => {
     try {
         const { urls, filename } = req.query;
         if (!urls) return res.status(400).send('URLs are required');
@@ -361,7 +353,7 @@ app.get('/api/download-zip', async (req, res) => {
         res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}.zip"`);
 
         const archive = archiver('zip', {
-            zlib: { level: 9 } // Sets the compression level.
+            zlib: { level: 9 }
         });
 
         archive.on('error', (err) => {
@@ -377,10 +369,10 @@ app.get('/api/download-zip', async (req, res) => {
                 const response = await axios({
                     method: 'GET',
                     url: url,
-                    responseType: 'stream'
+                    responseType: 'stream',
+                    timeout: 20000
                 });
                 
-                // Determine extension
                 let extension = '.jpg';
                 const contentType = response.headers['content-type'];
                  if (contentType) {
@@ -392,16 +384,24 @@ app.get('/api/download-zip', async (req, res) => {
                 archive.append(response.data, { name: `image_${i + 1}${extension}` });
             } catch (err) {
                  console.error(`Failed to download image ${url} for zip:`, err.message);
-                 // We continue even if one fails, or we could append an error text file
             }
         }
 
         await archive.finalize();
 
     } catch (error) {
-        console.error('Error in /api/download-zip:', error.message);
+        console.error('Error in /download-zip:', error.message);
         if (!res.headersSent) res.status(500).send('Failed to create zip');
     }
+});
+
+// Mount router on both /api and / to handle all routing environments seamlessly
+app.use('/api', apiRouter);
+app.use('/', apiRouter);
+
+// Serve stats page
+app.get('/stats', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'stats.html'));
 });
 
 if (require.main === module) {

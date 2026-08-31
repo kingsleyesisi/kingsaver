@@ -96,39 +96,23 @@ async function triggerDownload(url, btnElement) {
     if (textLoading) textLoading.classList.remove('hidden');
 
     try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error('Download failed');
-
-        const blob = await response.blob();
-        const downloadUrl = window.URL.createObjectURL(blob);
+        // Direct browser streaming download via anchor with fallback
         const a = document.createElement('a');
-        a.href = downloadUrl;
-
-        const disposition = response.headers.get('content-disposition');
-        let filename = 'video.mp4';
-        if (disposition && disposition.indexOf('attachment') !== -1) {
-            const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
-            const matches = filenameRegex.exec(disposition);
-            if (matches != null && matches[1]) {
-                filename = matches[1].replace(/['"]/g, '');
-            }
-        }
-
-        a.download = filename;
+        a.href = url;
+        a.setAttribute('download', '');
         document.body.appendChild(a);
         a.click();
-        window.URL.revokeObjectURL(downloadUrl);
-        a.remove();
-
+        document.body.removeChild(a);
     } catch (error) {
-        console.error("Download failed:", error);
-        alert("Download failed. Please try again.");
+        console.error("Direct download failed, using location fallback:", error);
+        window.location.href = url;
     } finally {
-        // Restore UI
-        if (iconDefault) iconDefault.classList.remove('hidden');
-        if (iconLoading) iconLoading.forEach(el => el.classList.add('hidden'));
-        if (textDefault) textDefault.classList.remove('hidden');
-        if (textLoading) textLoading.classList.add('hidden');
+        setTimeout(() => {
+            if (iconDefault) iconDefault.classList.remove('hidden');
+            if (iconLoading) iconLoading.forEach(el => el.classList.add('hidden'));
+            if (textDefault) textDefault.classList.remove('hidden');
+            if (textLoading) textLoading.classList.add('hidden');
+        }, 3500);
     }
 }
 
