@@ -1,10 +1,12 @@
 {
-  "name": "tiktok",
+  "name": "kingsaver",
   "version": "1.0.0",
-  "description": "",
-  "main": "main.js",
+  "description": "Universal Social Media Video and Photo Downloader",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js",
+    "build": "echo 'Build successful'",
+    "test": "node --check server.js"
   },
   "keywords": [],
   "author": "",

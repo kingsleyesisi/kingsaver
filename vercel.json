@@ -1,57 +1,29 @@
 {
-    "version": 2,
-    "builds": [
-        {
-            "src": "server.js",
-            "use": "@vercel/node",
-            "config": {
-                "includeFiles": [
-                    "yt-dlp"
-                ]
-            }
-        },
-        {
-            "src": "public/**",
-            "use": "@vercel/static"
-        }
-    ],
-    "cleanUrls": true,
-    "routes": [
-        {
-            "src": "/",
-            "dest": "/public/index.html"
-        },
-        {
-            "src": "/youtube",
-            "dest": "/public/youtube.html"
-        },
-        {
-            "src": "/instagram",
-            "dest": "/public/instagram.html"
-        },
-        {
-            "src": "/facebook",
-            "dest": "/public/facebook.html"
-        },
-        {
-            "src": "/twitter",
-            "dest": "/public/twitter.html"
-        },
-        {
-            "src": "/stats",
-            "dest": "/public/stats.html"
-        },
-        {
-            "src": "/api/(.*)",
-            "dest": "/server.js"
-        },
-        {
-            "src": "/(.*).(css|js|html|png|jpg|svg|ico)",
-            "dest": "/public/$1.$2"
-        },
-        {
-            "src": "/(.*)",
-            "dest": "/public/index.html"
-        }
-    ]
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index.js"
+    },
+    {
+      "source": "/youtube",
+      "destination": "/youtube.html"
+    },
+    {
+      "source": "/instagram",
+      "destination": "/instagram.html"
+    },
+    {
+      "source": "/facebook",
+      "destination": "/facebook.html"
+    },
+    {
+      "source": "/twitter",
+      "destination": "/twitter.html"
+    },
+    {
+      "source": "/stats",
+      "destination": "/stats.html"
+    }
+  ]
 }

@@ -404,7 +404,7 @@ app.get('/api/download-zip', async (req, res) => {
     }
 });
 
-if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+if (require.main === module) {
     app.listen(PORT, () => {
         console.log(`Server is running on http://localhost:${PORT}`);
     });
