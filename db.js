@@ -1,9 +1,16 @@
 const { Pool } = require('pg');
 
-const connectionString = 'postgresql://neondb_owner:npg_W1zKbYhnac6s@ep-gentle-paper-ad7n0kvg.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
+const connectionString = process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_W1zKbYhnac6s@ep-gentle-paper-ad7n0kvg.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
 
 const pool = new Pool({
   connectionString,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
+
+pool.on('error', (err) => {
+    console.error('Unexpected error on idle PG client:', err.message);
 });
 
 const initDb = async () => {

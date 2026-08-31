@@ -26,6 +26,18 @@
             "dest": "/public/youtube.html"
         },
         {
+            "src": "/instagram",
+            "dest": "/public/instagram.html"
+        },
+        {
+            "src": "/facebook",
+            "dest": "/public/facebook.html"
+        },
+        {
+            "src": "/twitter",
+            "dest": "/public/twitter.html"
+        },
+        {
             "src": "/stats",
             "dest": "/public/stats.html"
         },
