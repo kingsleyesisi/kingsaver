@@ -25,5 +25,10 @@
       "source": "/stats",
       "destination": "/stats.html"
     }
-  ]
+  ],
+  "functions": {
+    "api/index.js": {
+      "includeFiles": "yt-dlp"
+    }
+  }
 }
